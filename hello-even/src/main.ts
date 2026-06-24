@@ -1,5 +1,9 @@
 import { waitForEvenAppBridge, OsEventTypeList } from "@evenrealities/even_hub_sdk";
-import { REFRESH_MS } from "./config";
+import {
+  REFRESH_MS,
+  POST_PAIR_RETRIES,
+  POST_PAIR_RETRY_MS,
+} from "./config";
 import { getBalances, getTransactions, UnauthorizedError } from "./data/bankApi";
 import {
   loadDeviceToken,
@@ -12,8 +16,11 @@ import {
   type AppState,
   type Screen,
   initialState,
-  withData,
-  withStatus,
+  withAccounts,
+  withTransactions,
+  withAccountsPhase,
+  withTransactionsPhase,
+  withCache,
   navigate,
   selectTransaction,
   selectedTransaction,
@@ -39,6 +46,7 @@ import {
   txnRows,
   txnListContainer,
   txnEmptyContainer,
+  txnEmptyMessage,
 } from "./ui/transactionsScreen";
 import { detailContainer, detailContent } from "./ui/detailScreen";
 import { pairingContainer, pairingContent, pairingStatus } from "./ui/pairingScreen";
@@ -58,7 +66,7 @@ await loadDeviceToken(bridge);
 try {
   const cached = fromCache(await bridge.getLocalStorage(CACHE_KEY));
   if (cached) {
-    state = withData(state, cached.accounts, cached.transactions, cached.lastUpdated);
+    state = withCache(state, cached);
   }
 } catch (err) {
   console.error("cache load failed:", err);
@@ -74,7 +82,9 @@ function buildContainers(s: AppState): PageContainers {
     return { text: [pairingContainer(content)] };
   }
   if (s.screen === "transactions") {
-    if (s.transactions.length === 0) return { text: [txnEmptyContainer()] };
+    if (s.transactions.length === 0) {
+      return { text: [txnEmptyContainer(txnEmptyMessage(s))] };
+    }
     return {
       text: [txnTitleContainer(txnTitle(s))],
       list: [txnListContainer(txnRows(s))],
@@ -100,24 +110,68 @@ function render(prevScreen?: Screen): void {
   }
 }
 
-async function refresh(): Promise<void> {
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+function persistCache(): void {
+  void bridge.setLocalStorage(CACHE_KEY, JSON.stringify(toCache(state)));
+}
+
+// A 401 from either fetch means the device token is gone — re-pair once.
+let repairing = false;
+async function handleUnauthorized(): Promise<void> {
+  if (repairing) return;
+  repairing = true;
+  try {
+    await beginPairing();
+  } finally {
+    repairing = false;
+  }
+}
+
+// Balances and transactions refresh INDEPENDENTLY so a slow/empty transaction
+// sync never blanks balances the user already has (the old coupled Promise.all
+// failed the whole screen on either error).
+async function refreshBalances(): Promise<void> {
   const prev = state.screen;
   try {
-    const [accounts, transactions] = await Promise.all([
-      getBalances(),
-      getTransactions(),
-    ]);
-    state = withData(state, accounts, transactions, Date.now());
-    void bridge.setLocalStorage(CACHE_KEY, JSON.stringify(toCache(state)));
+    const accounts = await getBalances();
+    state = withAccounts(state, accounts, Date.now());
+    persistCache();
     render(prev);
   } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      await beginPairing(); // token missing/expired/revoked -> re-pair
-      return;
-    }
-    console.error("refresh failed:", err);
-    state = withStatus(state, "offline");
+    if (err instanceof UnauthorizedError) return void handleUnauthorized();
+    console.error("balances refresh failed:", err);
+    state = withAccountsPhase(state, "offline");
     render(prev);
+  }
+}
+
+async function refreshTransactions(): Promise<void> {
+  const prev = state.screen;
+  try {
+    const transactions = await getTransactions();
+    state = withTransactions(state, transactions);
+    persistCache();
+    render(prev);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return void handleUnauthorized();
+    console.error("transactions refresh failed:", err);
+    state = withTransactionsPhase(state, "offline");
+    render(prev);
+  }
+}
+
+async function refresh(): Promise<void> {
+  await Promise.all([refreshBalances(), refreshTransactions()]);
+}
+
+// Right after pairing the Plaid item is still settling, so poll a few times
+// quickly until balances arrive instead of waiting a full refresh interval.
+async function refreshAfterPairing(): Promise<void> {
+  for (let i = 0; i < POST_PAIR_RETRIES; i++) {
+    await refresh();
+    if (state.accounts.length > 0 || state.screen === "pairing") return;
+    await delay(POST_PAIR_RETRY_MS);
   }
 }
 
@@ -134,9 +188,14 @@ async function beginPairing(): Promise<void> {
     const token = await pollForToken(pairingStart);
     await persistDeviceToken(bridge, token);
     pairingStart = null;
-    state = withStatus(navigate(state, "balance"), "loading");
+    // Fresh pairing: no data yet, so show the connecting state, then poll until
+    // balances arrive.
+    state = withTransactionsPhase(
+      withAccountsPhase(navigate(state, "balance"), "loading"),
+      "loading",
+    );
     rebuild(buildContainers(state));
-    await refresh();
+    await refreshAfterPairing();
   } catch (err) {
     console.error("pairing failed:", err);
     pairingMessage = "Pairing failed. Double-tap to exit, then reopen.";

@@ -4,37 +4,52 @@
 import type { Account, Transaction } from "../data/types";
 
 export type Screen = "pairing" | "balance" | "transactions" | "detail";
-export type Status = "loading" | "ready" | "offline";
+// Balances and transactions load independently (a slow transaction sync must
+// never blank balances), so each tracks its own phase: "loading" until the
+// first success, "ready" after, "offline" when a fetch fails.
+export type Phase = "loading" | "ready" | "offline";
 
 export interface AppState {
   readonly screen: Screen;
-  readonly status: Status;
   readonly accounts: readonly Account[];
   readonly transactions: readonly Transaction[];
+  readonly accountsPhase: Phase;
+  readonly txnsPhase: Phase;
   readonly selectedTxnIndex: number;
-  readonly lastUpdated: number | null; // epoch ms
+  readonly lastUpdated: number | null; // epoch ms of last successful balances fetch
 }
 
 export const initialState: AppState = {
   screen: "balance",
-  status: "loading",
   accounts: [],
   transactions: [],
+  accountsPhase: "loading",
+  txnsPhase: "loading",
   selectedTxnIndex: 0,
   lastUpdated: null,
 };
 
-export function withData(
+export function withAccounts(
   s: AppState,
   accounts: Account[],
-  transactions: Transaction[],
   lastUpdated: number,
 ): AppState {
-  return { ...s, accounts, transactions, lastUpdated, status: "ready" };
+  return { ...s, accounts, lastUpdated, accountsPhase: "ready" };
 }
 
-export function withStatus(s: AppState, status: Status): AppState {
-  return { ...s, status };
+export function withTransactions(
+  s: AppState,
+  transactions: Transaction[],
+): AppState {
+  return { ...s, transactions, txnsPhase: "ready" };
+}
+
+export function withAccountsPhase(s: AppState, phase: Phase): AppState {
+  return { ...s, accountsPhase: phase };
+}
+
+export function withTransactionsPhase(s: AppState, phase: Phase): AppState {
+  return { ...s, txnsPhase: phase };
 }
 
 export function navigate(s: AppState, screen: Screen): AppState {
@@ -62,6 +77,19 @@ export function toCache(s: AppState): CacheShape {
     accounts: [...s.accounts],
     transactions: [...s.transactions],
     lastUpdated: s.lastUpdated ?? Date.now(),
+  };
+}
+
+// Seed state from cache for an instant first paint. Cached data counts as
+// "ready" (shown with its relative timestamp) until a live refresh replaces it.
+export function withCache(s: AppState, c: CacheShape): AppState {
+  return {
+    ...s,
+    accounts: c.accounts,
+    transactions: c.transactions,
+    lastUpdated: c.lastUpdated,
+    accountsPhase: "ready",
+    txnsPhase: "ready",
   };
 }
 

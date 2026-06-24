@@ -7,4 +7,11 @@ const env = import.meta.env;
 
 export const API_BASE_URL = (env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
 export const REFRESH_MS = Number(env.VITE_REFRESH_MS ?? 60_000);
-export const REQUEST_TIMEOUT_MS = 5_000;
+// Live Plaid calls (especially a transactions sync right after linking) can take
+// well over 5s, so allow generous headroom before aborting a request.
+export const REQUEST_TIMEOUT_MS = 12_000;
+
+// Right after pairing, poll a few times quickly so balances appear promptly
+// instead of waiting for the next steady-state refresh tick.
+export const POST_PAIR_RETRIES = 6;
+export const POST_PAIR_RETRY_MS = 4_000;

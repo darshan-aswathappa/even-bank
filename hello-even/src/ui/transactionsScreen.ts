@@ -76,9 +76,18 @@ export function txnListContainer(items: string[]): ListContainerProperty {
   });
 }
 
-// Shown when there are no transactions — an event-capturing text container so
-// double-tap (back) still works.
-export function txnEmptyContainer(): TextContainerProperty {
+// State-appropriate message for the empty/loading/offline transactions view.
+export function txnEmptyMessage(state: AppState): string {
+  if (state.txnsPhase === "loading") return "Loading transactions…";
+  if (state.txnsPhase === "offline") {
+    return "Can't load transactions.\nRetrying…";
+  }
+  return "No transactions yet.\nThey'll appear here soon.";
+}
+
+// Shown when there are no transaction rows — an event-capturing text container
+// so double-tap (back) still works.
+export function txnEmptyContainer(message: string): TextContainerProperty {
   return new TextContainerProperty({
     xPosition: 0,
     yPosition: 0,
@@ -91,6 +100,6 @@ export function txnEmptyContainer(): TextContainerProperty {
     containerID: TXN_TITLE_ID,
     containerName: "txnempty",
     isEventCapture: 1,
-    content: `TRANSACTIONS\n\nNo transactions yet.\n\n${DOT}${DOT} back`,
+    content: `TRANSACTIONS\n\n${message}\n\n${DOT}${DOT} back`,
   });
 }

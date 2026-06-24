@@ -33,22 +33,46 @@ export function balanceContainer(content: string): TextContainerProperty {
 }
 
 export function balanceContent(state: AppState): string {
-  if (state.status === "loading" && state.accounts.length === 0) {
-    return "CONNECTING…";
+  const hint = `${DOT} transactions     ${DOT}${DOT} exit`;
+  const exitHint = `${DOT}${DOT} exit`;
+  const rule = hr(INNER_W);
+
+  // No accounts to show yet — pick a state-appropriate message rather than a
+  // bare "NO ACCOUNTS".
+  if (state.accounts.length === 0) {
+    if (state.accountsPhase === "loading") {
+      return ["BALANCE", rule, "", "Connecting to your bank…", "", exitHint].join("\n");
+    }
+    if (state.accountsPhase === "offline") {
+      return [
+        "BALANCE",
+        rule,
+        "",
+        "Can't reach your bank.",
+        "Retrying…",
+        "",
+        exitHint,
+      ].join("\n");
+    }
+    // Loaded successfully but the bank reported no accounts (rare edge case).
+    return [
+      "BALANCE",
+      rule,
+      "",
+      "No accounts linked.",
+      "Re-link in the Even Bank app.",
+      "",
+      exitHint,
+    ].join("\n");
   }
 
+  // Have accounts — show them, flagging the last sync as stale when offline.
   const updated =
-    state.status === "offline"
+    state.accountsPhase === "offline"
       ? `offline · ${relativeTime(state.lastUpdated)}`.trim()
       : relativeTime(state.lastUpdated);
 
   const header = justify("BALANCE", updated, INNER_W);
-  const rule = hr(INNER_W);
-  const hint = `${DOT} transactions     ${DOT}${DOT} exit`;
-
-  if (state.accounts.length === 0) {
-    return [header, rule, "", "NO ACCOUNTS", "", hint].join("\n");
-  }
 
   const rows = state.accounts.map((a) =>
     justify(
