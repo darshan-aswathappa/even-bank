@@ -18,7 +18,21 @@ import { webhookRouter } from "./routes/webhook";
 const app = express();
 app.set("trust proxy", 1); // correct client IP behind a managed-platform proxy
 
-app.use(helmet());
+// CSP tuned for the onboarding page: its own script is external ('self'), and
+// Plaid Link loads/embeds from cdn.plaid.com. API responses are JSON (CSP n/a).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": ["'self'", "https://cdn.plaid.com"],
+        "frame-src": ["'self'", "https://cdn.plaid.com", "https://*.plaid.com"],
+        "connect-src": ["'self'", "https://*.plaid.com"],
+        "img-src": ["'self'", "data:"],
+      },
+    },
+  }),
+);
 app.use(pinoHttp({ logger }));
 
 // Pinned CORS (never "*"); credentials enabled for the onboarding session cookie.
