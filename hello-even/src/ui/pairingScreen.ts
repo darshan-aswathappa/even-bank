@@ -32,7 +32,7 @@ export function pairingContent(start: PairingStart): string {
     "",
     "1. On your phone, open:",
     `   ${start.verificationUri}`,
-    "2. Sign in, then enter code:",
+    "2. Enter this code:",
     `   ${start.userCode}`,
     "",
     "Waiting for you to finish…",

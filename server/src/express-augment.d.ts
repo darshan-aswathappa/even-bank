@@ -6,6 +6,7 @@ declare global {
     interface Request {
       userId?: string;
       deviceId?: string;
+      deviceAuthId?: string; // set by requireClaim for the onboarding Plaid window
     }
   }
 }

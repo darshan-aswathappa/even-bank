@@ -1,4 +1,4 @@
-// Plaid Link endpoints — now behind the phone SESSION (no longer public).
+// Plaid Link endpoints — behind the phone's CLAIM token (no longer public).
 //  POST /api/link/token/create        -> per-user link token
 //  POST /api/item/public_token/exchange -> store encrypted token, finish pairing
 
@@ -7,15 +7,15 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { mode } from "../config";
 import * as plaidService from "../services/plaidService";
-import { requireSession, getSession } from "../middleware/session";
+import { requireClaim } from "../middleware/claim";
 import { db } from "../db/client";
 import { deviceAuth } from "../db/schema";
 import { HttpError } from "../types";
 
 export const linkRouter = Router();
 
-// POST /api/link/token/create  (session)
-linkRouter.post("/link/token/create", requireSession, async (req, res) => {
+// POST /api/link/token/create  (claim token)
+linkRouter.post("/link/token/create", requireClaim, async (req, res) => {
   try {
     if (mode === "mock") {
       res.json({ mode });
@@ -32,7 +32,7 @@ linkRouter.post("/link/token/create", requireSession, async (req, res) => {
 const exchangeSchema = z.object({ public_token: z.string().min(1) });
 linkRouter.post(
   "/item/public_token/exchange",
-  requireSession,
+  requireClaim,
   async (req, res) => {
     try {
       const userId = req.userId!;
@@ -45,15 +45,12 @@ linkRouter.post(
         await plaidService.exchangePublicToken(userId, parsed.data.public_token);
       }
 
-      // Finish the pairing bound to this session: mark it linked so the glasses'
-      // poll can mint a device token.
-      const session = await getSession(req, res);
-      if (session.deviceAuthId) {
-        await db
-          .update(deviceAuth)
-          .set({ status: "linked" })
-          .where(eq(deviceAuth.id, session.deviceAuthId));
-      }
+      // Finish the pairing bound to this claim token: mark it linked so the
+      // glasses' poll can mint a device token.
+      await db
+        .update(deviceAuth)
+        .set({ status: "linked" })
+        .where(eq(deviceAuth.id, req.deviceAuthId!));
       res.json({ ok: true, mode });
     } catch (err) {
       sendErr(res, err, "public_token/exchange");

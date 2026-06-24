@@ -1,7 +1,7 @@
 // Per-user Plaid item storage. Access tokens are encrypted at rest (AES-256-GCM,
 // AAD bound to user_id|item_id) and only ever decrypted in-process for a Plaid call.
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { plaidItems } from "../db/schema";
 import { encrypt, decrypt, aad } from "../crypto/encryption";
@@ -51,18 +51,6 @@ export async function getItemByItemId(
   return (
     await db.select().from(plaidItems).where(eq(plaidItems.itemId, itemId)).limit(1)
   )[0];
-}
-
-export async function userHasGoodItem(userId: string): Promise<boolean> {
-  return (
-    (
-      await db
-        .select({ id: plaidItems.id })
-        .from(plaidItems)
-        .where(and(eq(plaidItems.userId, userId), eq(plaidItems.status, "good")))
-        .limit(1)
-    ).length > 0
-  );
 }
 
 export function decryptAccessToken(item: PlaidItemRow): string {

@@ -20,11 +20,11 @@ beforeAll(async () => {
   const stamp = Date.now();
   const [a] = await db
     .insert(users)
-    .values({ email: `a+${stamp}@test.local`, emailVerified: true })
+    .values({ email: `a+${stamp}@test.local` })
     .returning();
   const [b] = await db
     .insert(users)
-    .values({ email: `b+${stamp}@test.local`, emailVerified: true })
+    .values({ email: `b+${stamp}@test.local` })
     .returning();
   userAId = a.id;
   userBId = b.id;

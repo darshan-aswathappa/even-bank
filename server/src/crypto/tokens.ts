@@ -8,13 +8,19 @@ export function sha256(input: string): Buffer {
 }
 
 // High-entropy opaque secret (256-bit), URL-safe. Used for device tokens,
-// device codes, and magic-link tokens.
+// device codes, and claim tokens.
 export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
 export function deviceToken(): string {
   return `dt_${randomToken(32)}`;
+}
+
+// Phone-side credential for the brief Plaid-linking window, issued when the
+// onboarding page claims a user_code. Only its SHA-256 hash is persisted.
+export function claimToken(): string {
+  return `cl_${randomToken(32)}`;
 }
 
 // Crockford base32 (no I, L, O, U) — unambiguous for humans to read off the

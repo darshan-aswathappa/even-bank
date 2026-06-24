@@ -12,7 +12,6 @@ import { transactionsRouter } from "./routes/transactions";
 import { linkRouter } from "./routes/link";
 import { onboardingRouter } from "./routes/onboarding";
 import { deviceAuthRouter } from "./routes/deviceAuth";
-import { authRouter } from "./routes/auth";
 import { webhookRouter } from "./routes/webhook";
 
 const app = express();
@@ -35,11 +34,11 @@ app.use(
 );
 app.use(pinoHttp({ logger }));
 
-// Pinned CORS (never "*"); credentials enabled for the onboarding session cookie.
+// Pinned CORS (never "*"). Auth is via Bearer tokens (device + claim), not
+// cookies, so credentials are not needed.
 app.use(
   cors({
     origin: config.allowedOrigins.length ? config.allowedOrigins : false,
-    credentials: true,
   }),
 );
 
@@ -48,9 +47,8 @@ app.use("/api/plaid/webhook", express.raw({ type: "*/*" }), webhookRouter);
 
 app.use(express.json({ limit: "100kb" }));
 
-// Rate limiters (in-memory; use a shared store like Redis for multi-instance).
+// Rate limiter (in-memory; use a shared store like Redis for multi-instance).
 const pairingLimiter = rateLimit({ windowMs: 60_000, limit: 30 });
-const authLimiter = rateLimit({ windowMs: 60_000, limit: 10 });
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, mode });
@@ -64,10 +62,10 @@ app.get("/ready", async (_req, res) => {
   }
 });
 
-// Public onboarding page + Plaid Link endpoints (link is session-protected internally).
+// Public onboarding page + pairing/claim endpoints + Plaid Link (link is
+// claim-token-protected internally).
 app.use(onboardingRouter);
 app.use("/api", pairingLimiter, deviceAuthRouter);
-app.use("/api", authLimiter, authRouter);
 app.use("/api", linkRouter);
 
 // Glasses data endpoints — device-token auth, per-user.

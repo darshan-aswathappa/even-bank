@@ -22,19 +22,17 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   },
 });
 
-export const users = pgTable(
-  "users",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(), // stored lowercased; unique via index below
-    emailVerified: boolean("email_verified").notNull().default(false),
-    // Bump to revoke ALL of a user's devices at once.
-    tokenVersion: integer("token_version").notNull().default(1),
-    status: text("status").notNull().default("active"), // active | disabled
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [uniqueIndex("users_email_unique").on(t.email)],
-);
+// Accounts are anonymous: created at pairing time, identified only by their
+// device token + Plaid item. `email` is nullable and reserved for a future
+// optional recovery flow — nothing sets it today.
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email"), // nullable; reserved for future optional recovery
+  // Bump to revoke ALL of a user's devices at once.
+  tokenVersion: integer("token_version").notNull().default(1),
+  status: text("status").notNull().default("active"), // active | disabled
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const devices = pgTable(
   "devices",
@@ -93,6 +91,9 @@ export const deviceAuth = pgTable(
     userCode: text("user_code"), // short human-typed code (rate-limited)
     status: text("status").notNull().default("pending"), // pending|authorized|linked|denied|expired
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    // SHA-256 of the phone's claim token — the credential the onboarding page
+    // uses for the brief Plaid-linking window (set when the code is claimed).
+    claimTokenHash: bytea("claim_token_hash"),
     pollIntervalS: integer("poll_interval_s").notNull().default(5),
     attempts: integer("attempts").notNull().default(0), // failed user_code entries
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -101,24 +102,8 @@ export const deviceAuth = pgTable(
   (t) => [
     uniqueIndex("device_auth_code_hash_unique").on(t.deviceCodeHash),
     uniqueIndex("device_auth_user_code_unique").on(t.userCode),
+    uniqueIndex("device_auth_claim_hash_unique").on(t.claimTokenHash),
   ],
-);
-
-// Email magic-link tokens.
-export const loginTokens = pgTable(
-  "login_tokens",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    tokenHash: bytea("token_hash").notNull(),
-    deviceCodeId: uuid("device_code_id").references(() => deviceAuth.id, {
-      onDelete: "cascade",
-    }),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [uniqueIndex("login_tokens_hash_unique").on(t.tokenHash)],
 );
 
 // Per-user transaction cache, populated by Plaid webhooks (sync off the request path).
