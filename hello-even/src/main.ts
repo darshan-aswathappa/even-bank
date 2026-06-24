@@ -38,8 +38,12 @@ import {
 import {
   balanceContainer,
   balanceContent,
+  balanceHintContainer,
+  balanceHint,
   BALANCE_ID,
   BALANCE_NAME,
+  BALANCE_HINT_ID,
+  BALANCE_HINT_NAME,
 } from "./ui/balanceScreen";
 import {
   txnTitleContainer,
@@ -94,7 +98,12 @@ function buildContainers(s: AppState): PageContainers {
   if (s.screen === "detail") {
     return { text: [detailContainer(detailContent(selectedTransaction(s)))] };
   }
-  return { text: [balanceContainer(balanceContent(s))] };
+  return {
+    text: [
+      balanceContainer(balanceContent(s)),
+      balanceHintContainer(balanceHint(s)),
+    ],
+  };
 }
 
 // First paint: pairing if we have no device token yet, else Balance.
@@ -107,6 +116,7 @@ console.log("Page created:", result === 0 ? "success" : `failed(${result})`);
 function render(prevScreen?: Screen): void {
   if (state.screen === "balance" && prevScreen === "balance") {
     upgradeText(BALANCE_ID, BALANCE_NAME, balanceContent(state));
+    upgradeText(BALANCE_HINT_ID, BALANCE_HINT_NAME, balanceHint(state));
   } else {
     rebuild(buildContainers(state));
   }
