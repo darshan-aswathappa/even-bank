@@ -3,6 +3,7 @@ import {
   REFRESH_MS,
   POST_PAIR_RETRIES,
   POST_PAIR_RETRY_MS,
+  DEV_MODE,
 } from "./config";
 import { getBalances, getTransactions, UnauthorizedError } from "./data/bankApi";
 import {
@@ -97,7 +98,8 @@ function buildContainers(s: AppState): PageContainers {
 }
 
 // First paint: pairing if we have no device token yet, else Balance.
-const haveToken = !!getDeviceToken();
+// Dev mode skips pairing outright — fixtures need no token, so go to Balance.
+const haveToken = DEV_MODE || !!getDeviceToken();
 state = navigate(state, haveToken ? "balance" : "pairing");
 const result = await createPage(buildContainers(state));
 console.log("Page created:", result === 0 ? "success" : `failed(${result})`);

@@ -4,7 +4,7 @@
 
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import type { PairingStart } from "../data/pairing";
-import { DOT } from "./glyphs";
+import { CHEVRON } from "./glyphs";
 
 export const PAIRING_ID = 1;
 export const PAIRING_NAME = "pairing";
@@ -36,10 +36,10 @@ export function pairingContent(start: PairingStart): string {
     `   ${start.userCode}`,
     "",
     "Waiting for you to finish…",
-    `${DOT}${DOT} exit`,
+    `${CHEVRON}${CHEVRON} exit`,
   ].join("\n");
 }
 
 export function pairingStatus(message: string): string {
-  return ["PAIR YOUR GLASSES", "", message, "", `${DOT}${DOT} exit`].join("\n");
+  return ["PAIR YOUR GLASSES", "", message, "", `${CHEVRON}${CHEVRON} exit`].join("\n");
 }

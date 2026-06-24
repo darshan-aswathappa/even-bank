@@ -11,7 +11,7 @@ import {
 import type { AppState } from "../state/store";
 import { formatAmount } from "./format";
 import { clampBytes, byteLength } from "./fit";
-import { DOT, MIDDOT } from "./glyphs";
+import { CHEVRON, MIDDOT } from "./glyphs";
 
 export const TXN_TITLE_ID = 1;
 export const TXN_TITLE_NAME = "txntitle";
@@ -100,6 +100,6 @@ export function txnEmptyContainer(message: string): TextContainerProperty {
     containerID: TXN_TITLE_ID,
     containerName: "txnempty",
     isEventCapture: 1,
-    content: `TRANSACTIONS\n\n${message}\n\n${DOT}${DOT} back`,
+    content: `TRANSACTIONS\n\n${message}\n\n${CHEVRON}${CHEVRON} back`,
   });
 }

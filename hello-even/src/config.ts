@@ -5,6 +5,11 @@
 
 const env = import.meta.env;
 
+// Dev mode (VITE_DEV_MODE=true): serve dummy data from data/fixtures.ts and skip
+// pairing entirely, so the UI lands straight on the Balance screen with content.
+// Lets you iterate on screens without a backend, device token, or real bank link.
+export const DEV_MODE = (env.VITE_DEV_MODE ?? "false") === "true";
+
 export const API_BASE_URL = (env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
 export const REFRESH_MS = Number(env.VITE_REFRESH_MS ?? 60_000);
 // Live Plaid calls (especially a transactions sync right after linking) can take

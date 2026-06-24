@@ -3,7 +3,7 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import type { Transaction } from "../data/types";
 import { formatAmount, formatDate } from "./format";
-import { DOT } from "./glyphs";
+import { CHEVRON } from "./glyphs";
 
 export const DETAIL_ID = 1;
 export const DETAIL_NAME = "detail";
@@ -26,7 +26,7 @@ export function detailContainer(content: string): TextContainerProperty {
 }
 
 export function detailContent(t: Transaction | null): string {
-  if (!t) return `TRANSACTION\n\nNothing selected.\n\n${DOT}${DOT} back`;
+  if (!t) return `TRANSACTION\n\nNothing selected.\n\n${CHEVRON}${CHEVRON} back`;
 
   const lines = [
     "TRANSACTION",
@@ -37,6 +37,6 @@ export function detailContent(t: Transaction | null): string {
   ];
   if (t.category) lines.push(t.category);
   lines.push(t.pending ? "PENDING" : "POSTED");
-  lines.push("", `${DOT}${DOT} back`);
+  lines.push("", `${CHEVRON}${CHEVRON} back`);
   return lines.join("\n");
 }

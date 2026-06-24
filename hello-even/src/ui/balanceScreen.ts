@@ -5,7 +5,7 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import type { AppState } from "../state/store";
 import { accountLabel, formatBalance, relativeTime } from "./format";
 import { justify, hr, measureHeight } from "./fit";
-import { DOT } from "./glyphs";
+import { CHEVRON } from "./glyphs";
 
 export const BALANCE_ID = 1;
 export const BALANCE_NAME = "balance";
@@ -33,8 +33,8 @@ export function balanceContainer(content: string): TextContainerProperty {
 }
 
 export function balanceContent(state: AppState): string {
-  const hint = `${DOT} transactions     ${DOT}${DOT} exit`;
-  const exitHint = `${DOT}${DOT} exit`;
+  const hint = `${CHEVRON} transactions     ${CHEVRON}${CHEVRON} exit`;
+  const exitHint = `${CHEVRON}${CHEVRON} exit`;
   const rule = hr(INNER_W);
 
   // No accounts to show yet — pick a state-appropriate message rather than a

@@ -1,5 +1,6 @@
-import { API_BASE_URL, REQUEST_TIMEOUT_MS } from "../config";
+import { API_BASE_URL, REQUEST_TIMEOUT_MS, DEV_MODE } from "../config";
 import { getDeviceToken } from "./session";
+import { DEV_ACCOUNTS, DEV_TRANSACTIONS } from "./fixtures";
 import type {
   Account,
   Transaction,
@@ -29,12 +30,18 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function getBalances(): Promise<Account[]> {
+  if (DEV_MODE) return DEV_ACCOUNTS;
   return (await apiGet<BalancesResponse>("/balances")).accounts;
 }
 
 export async function getTransactions(
   accountId?: string,
 ): Promise<Transaction[]> {
+  if (DEV_MODE) {
+    return accountId
+      ? DEV_TRANSACTIONS.filter((t) => t.accountId === accountId)
+      : DEV_TRANSACTIONS;
+  }
   const query = accountId ? `?account_id=${encodeURIComponent(accountId)}` : "";
   return (await apiGet<TransactionsResponse>(`/transactions${query}`)).transactions;
 }
