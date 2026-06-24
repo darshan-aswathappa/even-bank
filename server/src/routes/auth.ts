@@ -13,6 +13,7 @@ import { sendMagicLink } from "../services/email";
 import { getSession, requireSession } from "../middleware/session";
 import { userHasGoodItem } from "../services/itemStore";
 import { config } from "../config";
+import { logger } from "../logger";
 
 export const authRouter = Router();
 
@@ -38,15 +39,20 @@ authRouter.post("/auth/magic-link", async (req, res) => {
   }
   const email = parsed.data.email.toLowerCase();
   const token = randomToken(32);
-  await db.insert(loginTokens).values({
-    email,
-    tokenHash: sha256(token),
-    expiresAt: new Date(Date.now() + LOGIN_TTL_MS),
-  });
-  const url = `${config.publicBaseUrl}/api/auth/callback?token=${encodeURIComponent(token)}`;
-  await sendMagicLink(email, url);
-  // Never reveal whether the email exists.
-  res.json({ ok: true });
+  try {
+    await db.insert(loginTokens).values({
+      email,
+      tokenHash: sha256(token),
+      expiresAt: new Date(Date.now() + LOGIN_TTL_MS),
+    });
+    const url = `${config.publicBaseUrl}/api/auth/callback?token=${encodeURIComponent(token)}`;
+    await sendMagicLink(email, url);
+    // Never reveal whether the email exists.
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err: String(err) }, "[auth] magic-link failed");
+    res.status(502).json({ ok: false, error: "email_unavailable" });
+  }
 });
 
 // GET /api/auth/callback?token=...
