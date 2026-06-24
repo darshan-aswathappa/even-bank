@@ -17,4 +17,6 @@ COPY --from=build /app/migrations ./migrations
 COPY drizzle.config.ts ./drizzle.config.ts
 USER node
 EXPOSE 8787
-CMD ["node", "dist/index.js"]
+# Apply migrations (idempotent — drizzle skips applied ones) then start the server.
+# exec-form sh -c avoids any platform-level command-string parsing ambiguity.
+CMD ["sh", "-c", "node dist/migrate.js && node dist/index.js"]

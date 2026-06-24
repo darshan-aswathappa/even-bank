@@ -17,11 +17,11 @@ services:
     dockerContext: ./server
     plan: free
     healthCheckPath: /health
-    # Free tier can't use preDeployCommand, so run migrations at startup instead
-    # (idempotent — drizzle skips already-applied migrations). On a single free
-    # instance there's no migration race. On Starter+, prefer:
-    #   preDeployCommand: node dist/migrate.js   (and set dockerCommand back to just the server)
-    dockerCommand: sh -c "node dist/migrate.js && node dist/index.js"
+    # Migrations run at startup via the Dockerfile CMD (free tier can't use
+    # preDeployCommand). Idempotent; safe on a single free instance.
+    # On Starter+ with multiple instances, switch to:
+    #   preDeployCommand: node dist/migrate.js
+    # and change the Dockerfile CMD back to ["node","dist/index.js"].
     envVars:
       - key: DATABASE_URL
         fromDatabase:
