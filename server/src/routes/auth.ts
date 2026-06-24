@@ -11,11 +11,22 @@ import { users, loginTokens, deviceAuth, plaidItems } from "../db/schema";
 import { sha256, randomToken, normalizeUserCode } from "../crypto/tokens";
 import { sendMagicLink } from "../services/email";
 import { getSession, requireSession } from "../middleware/session";
+import { userHasGoodItem } from "../services/itemStore";
 import { config } from "../config";
 
 export const authRouter = Router();
 
 const LOGIN_TTL_MS = 15 * 60 * 1000;
+
+// GET /api/auth/me -> session state for the onboarding page.
+authRouter.get("/auth/me", async (req, res) => {
+  const session = await getSession(req, res);
+  if (!session.userId) {
+    res.json({ authenticated: false });
+    return;
+  }
+  res.json({ authenticated: true, hasItem: await userHasGoodItem(session.userId) });
+});
 
 // POST /api/auth/magic-link  { email }
 const emailSchema = z.object({ email: z.string().email() });
