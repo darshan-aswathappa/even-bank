@@ -10,7 +10,7 @@
     {
       "name": "network",
       "desc": "Fetches your account balance and recent transactions from the Even Bank backend.",
-      "whitelist": ["https://api.example-bank.com"]
+      "whitelist": ["https://evenbank-api.onrender.com"]
     }
   ],
   "supported_languages": ["en"]

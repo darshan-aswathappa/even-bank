@@ -12,6 +12,8 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+# Static assets served at runtime (onboarding page).
+COPY --from=build /app/public ./public
 # Keep migrations + drizzle config available for the release/migrate step.
 COPY --from=build /app/migrations ./migrations
 COPY drizzle.config.ts ./drizzle.config.ts
