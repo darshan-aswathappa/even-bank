@@ -74,6 +74,22 @@ app.use("/api", linkRouter);
 app.use("/api", requireDevice, balancesRouter);
 app.use("/api", requireDevice, transactionsRouter);
 
+// Central error handler: logs the real error and returns JSON (not HTML).
+app.use(
+  (
+    err: unknown,
+    req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    logger.error(
+      { err: err instanceof Error ? err.stack : String(err), path: req.path },
+      "unhandled route error",
+    );
+    if (!res.headersSent) res.status(500).json({ error: "internal_error" });
+  },
+);
+
 app.listen(config.port, () => {
   logger.info(
     { port: config.port, mode },
