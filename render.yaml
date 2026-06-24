@@ -12,7 +12,7 @@ services:
   - type: web
     name: evenbank-api
     runtime: docker
-    repo: https://github.com/REPLACE_ME/REPLACE_ME # your repo URL
+    repo: https://github.com/darshan-aswathappa/even-bank # your repo URL
     dockerfilePath: ./server/Dockerfile
     dockerContext: ./server
     plan: free
