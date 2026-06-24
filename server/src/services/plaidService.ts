@@ -1,0 +1,156 @@
+// Per-user Plaid operations. Access tokens come from the encrypted item store
+// and are never returned to clients. Transactions are synced into our own cache
+// table (webhook-driven in production; lazy on read as a dev fallback).
+
+import {
+  type CountryCode,
+  type Products,
+  type Transaction as PlaidTransaction,
+} from "plaid";
+import { plaidClient } from "../plaidClient";
+import { config } from "../config";
+import { type ApiAccount, HttpError } from "../types";
+import * as itemStore from "./itemStore";
+import { db } from "../db/client";
+import { transactions } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { logger } from "../logger";
+
+function client() {
+  if (!plaidClient) throw new HttpError(500, "plaid_not_configured");
+  return plaidClient;
+}
+
+function webhookUrl(): string | undefined {
+  // Plaid rejects non-HTTPS webhooks; only register one when public over HTTPS.
+  return config.publicBaseUrl.startsWith("https")
+    ? `${config.publicBaseUrl}/api/plaid/webhook`
+    : undefined;
+}
+
+// `accessToken` set => Plaid Link "update mode" for re-authenticating an item.
+export async function createLinkToken(
+  userId: string,
+  accessToken?: string,
+): Promise<string> {
+  const resp = await client().linkTokenCreate({
+    user: { client_user_id: userId },
+    client_name: "Even Bank",
+    country_codes: config.plaid.countryCodes as CountryCode[],
+    language: "en",
+    webhook: webhookUrl(),
+    ...(accessToken
+      ? { access_token: accessToken }
+      : { products: config.plaid.products as Products[] }),
+  });
+  return resp.data.link_token;
+}
+
+export async function exchangePublicToken(
+  userId: string,
+  publicToken: string,
+): Promise<{ itemId: string }> {
+  const resp = await client().itemPublicTokenExchange({
+    public_token: publicToken,
+  });
+  const itemId = resp.data.item_id;
+  await itemStore.saveItem(userId, itemId, resp.data.access_token);
+  return { itemId };
+}
+
+export async function fetchBalances(userId: string): Promise<ApiAccount[]> {
+  const items = await itemStore.getUserItems(userId);
+  const out: ApiAccount[] = [];
+  for (const item of items) {
+    try {
+      const accessToken = itemStore.decryptAccessToken(item);
+      const resp = await client().accountsBalanceGet({ access_token: accessToken });
+      for (const a of resp.data.accounts) {
+        out.push({
+          id: a.account_id,
+          name: a.name,
+          mask: a.mask ?? null,
+          subtype: a.subtype ?? null,
+          currency: a.balances.iso_currency_code ?? null,
+          available: a.balances.available ?? null,
+          current: a.balances.current ?? null,
+        });
+      }
+    } catch (err) {
+      handleItemError(item.itemId, err);
+    }
+  }
+  return out;
+}
+
+// Pull transactions/sync for one item into the cache table.
+export async function syncItemTransactions(itemId: string): Promise<void> {
+  const item = await itemStore.getItemByItemId(itemId);
+  if (!item) return;
+  const accessToken = itemStore.decryptAccessToken(item);
+
+  let cursor = item.cursor ?? undefined;
+  const added: PlaidTransaction[] = [];
+  const modified: PlaidTransaction[] = [];
+  const removed: string[] = [];
+
+  try {
+    let hasMore = true;
+    while (hasMore) {
+      const resp = await client().transactionsSync({
+        access_token: accessToken,
+        cursor,
+      });
+      added.push(...resp.data.added);
+      modified.push(...resp.data.modified);
+      removed.push(...resp.data.removed.map((r) => r.transaction_id));
+      hasMore = resp.data.has_more;
+      cursor = resp.data.next_cursor;
+    }
+  } catch (err) {
+    const code = plaidErrorCode(err);
+    if (code === "PRODUCT_NOT_READY") return; // not ready yet; webhook will re-fire
+    handleItemError(itemId, err);
+    return;
+  }
+
+  for (const t of [...added, ...modified]) {
+    const row = {
+      id: t.transaction_id,
+      userId: item.userId,
+      itemId,
+      accountId: t.account_id,
+      name: t.name,
+      merchant: t.merchant_name ?? null,
+      amount: -t.amount, // flip Plaid sign: negative = spend, positive = income
+      isoDate: t.date,
+      pending: t.pending,
+      category:
+        t.personal_finance_category?.primary ?? t.category?.[0] ?? null,
+      updatedAt: new Date(),
+    };
+    await db
+      .insert(transactions)
+      .values(row)
+      .onConflictDoUpdate({ target: transactions.id, set: row });
+  }
+  for (const id of removed) {
+    await db.delete(transactions).where(eq(transactions.id, id));
+  }
+  if (cursor) await itemStore.setCursor(itemId, cursor);
+}
+
+function plaidErrorCode(err: unknown): string | undefined {
+  return (err as { response?: { data?: { error_code?: string } } })?.response
+    ?.data?.error_code;
+}
+
+function handleItemError(itemId: string, err: unknown): void {
+  const code = plaidErrorCode(err);
+  if (code === "ITEM_LOGIN_REQUIRED") {
+    void itemStore.setStatus(itemId, "login_required");
+    logger.warn({ itemId }, "[plaid] item needs re-auth (ITEM_LOGIN_REQUIRED)");
+    return;
+  }
+  logger.error({ itemId, code }, "[plaid] item error");
+}

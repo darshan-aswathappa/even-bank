@@ -1,0 +1,17 @@
+{
+  "package_id": "com.example.evenbank",
+  "edition": "202601",
+  "name": "Even Bank",
+  "version": "0.1.0",
+  "min_app_version": "2.0.0",
+  "min_sdk_version": "0.0.10",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Fetches your account balance and recent transactions from the Even Bank backend.",
+      "whitelist": ["https://api.example-bank.com"]
+    }
+  ],
+  "supported_languages": ["en"]
+}

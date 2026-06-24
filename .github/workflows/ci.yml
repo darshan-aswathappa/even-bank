@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: evenbank
+          POSTGRES_PASSWORD: evenbank
+          POSTGRES_DB: evenbank
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://evenbank:evenbank@localhost:5432/evenbank
+      SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Generate a throwaway KEK for tests
+        run: echo "KEK_BASE64=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - run: npx tsc --noEmit
+      - run: npm run db:migrate
+      - run: npm test
+      - run: npm run build

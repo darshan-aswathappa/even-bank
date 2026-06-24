@@ -1,0 +1,54 @@
+# Render Blueprint for the Even Bank backend + Postgres.
+# Deploy: push to GitHub, then Render Dashboard -> New -> Blueprint -> pick this repo.
+# Set the `sync: false` secrets in the dashboard after the first apply.
+
+databases:
+  - name: evenbank-db
+    databaseName: evenbank
+    user: evenbank
+    plan: free # upgrade to "starter" for a non-expiring DB
+
+services:
+  - type: web
+    name: evenbank-api
+    runtime: docker
+    repo: https://github.com/REPLACE_ME/REPLACE_ME # your repo URL
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: free
+    healthCheckPath: /health
+    # Apply DB migrations before each deploy goes live (runs inside the image).
+    preDeployCommand: node dist/migrate.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: evenbank-db
+          property: connectionString
+      # Render Postgres uses a private CA; same-region internal link can skip TLS.
+      - key: DATABASE_SSL
+        value: disable
+      - key: SESSION_SECRET
+        generateValue: true # Render generates a long random value
+      - key: KEK_BASE64
+        sync: false # set manually: openssl rand -base64 32  (must be 32 bytes)
+      - key: PLAID_CLIENT_ID
+        sync: false
+      - key: PLAID_SECRET
+        sync: false
+      - key: PLAID_ENV
+        value: production
+      - key: PLAID_PRODUCTS
+        value: transactions
+      - key: PLAID_COUNTRY_CODES
+        value: US
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Even Bank <onboarding@yourdomain.com>
+      # Set both to your real service URL after the first deploy (or a custom domain).
+      - key: PUBLIC_BASE_URL
+        value: https://evenbank-api.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: https://evenbank-api.onrender.com
+      - key: PORT
+        value: "8787"
