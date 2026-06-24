@@ -2,7 +2,7 @@
 // the same LVGL glyph advances the firmware uses. The firmware font is NOT
 // monospaced, so we measure rather than count characters.
 
-import { getTextWidth, pxTruncate } from "@evenrealities/pretext";
+import { getTextWidth, pxTruncate, measureTextWrap } from "@evenrealities/pretext";
 
 const SPACE_W = getTextWidth(" ") || 5;
 const HR_W = getTextWidth("─") || 8;
@@ -31,6 +31,13 @@ export function byteLength(text: string): number {
 export function hr(innerWidth: number): string {
   const n = Math.max(1, Math.floor(innerWidth / HR_W));
   return "─".repeat(n);
+}
+
+// Rendered pixel height of wrapped text at a given inner width, using the same
+// per-glyph LVGL line-breaking the firmware uses. Used to guard against
+// vertical overflow on multi-line screens.
+export function measureHeight(text: string, innerWidth: number): number {
+  return measureTextWrap(text, innerWidth).height;
 }
 
 // Left-align `left`, right-align `right` on a single line by padding the gap
