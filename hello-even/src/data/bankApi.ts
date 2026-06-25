@@ -1,20 +1,22 @@
 import { API_BASE_URL, REQUEST_TIMEOUT_MS, DEV_MODE } from "../config";
 import { getDeviceToken } from "./session";
-import { DEV_ACCOUNTS, DEV_TRANSACTIONS } from "./fixtures";
+import { DEV_ACCOUNTS, DEV_TRANSACTIONS, DEV_RECURRING } from "./fixtures";
 import type {
   Account,
   Transaction,
+  RecurringStream,
   BalancesResponse,
   TransactionsResponse,
+  RecurringResponse,
 } from "./types";
 
 // Thrown when the backend rejects our device token (missing/expired/revoked).
 // main.ts catches this to re-run the pairing flow.
 export class UnauthorizedError extends Error {}
 
-async function apiGet<T>(path: string): Promise<T> {
+async function apiGet<T>(path: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const token = getDeviceToken();
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -35,6 +37,15 @@ async function apiGet<T>(path: string): Promise<T> {
 export async function getBalances(): Promise<Account[]> {
   if (DEV_MODE) return DEV_ACCOUNTS;
   return (await apiGet<BalancesResponse>("/balances")).accounts;
+}
+
+// Plaid's recurring-pattern analysis can take 20-30 s on a production item.
+// Use a longer timeout than the default to avoid false "Can't load" errors.
+const RECURRING_TIMEOUT_MS = 45_000;
+
+export async function getRecurring(): Promise<RecurringStream[]> {
+  if (DEV_MODE) return DEV_RECURRING;
+  return (await apiGet<RecurringResponse>("/recurring", RECURRING_TIMEOUT_MS)).outflow;
 }
 
 export async function getTransactions(

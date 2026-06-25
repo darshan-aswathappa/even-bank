@@ -41,6 +41,17 @@ export function accountLabel(name: string, mask: string | null): string {
   return mask ? `${name} ····${mask}` : name;
 }
 
+export function formatFrequency(freq: string): string {
+  switch (freq) {
+    case "WEEKLY": return "/wk";
+    case "BIWEEKLY": return "/2wk";
+    case "SEMI_MONTHLY": return "/2×mo";
+    case "MONTHLY": return "/mo";
+    case "ANNUALLY": return "/yr";
+    default: return "";
+  }
+}
+
 export function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;

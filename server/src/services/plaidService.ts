@@ -6,10 +6,11 @@ import {
   type CountryCode,
   type Products,
   type Transaction as PlaidTransaction,
+  type TransactionStream,
 } from "plaid";
 import { plaidClient } from "../plaidClient";
 import { config } from "../config";
-import { type ApiAccount, HttpError } from "../types";
+import { type ApiAccount, type ApiRecurringStream, HttpError } from "../types";
 import * as itemStore from "./itemStore";
 import { db } from "../db/client";
 import { transactions } from "../db/schema";
@@ -74,6 +75,38 @@ export async function fetchBalances(userId: string): Promise<ApiAccount[]> {
           currency: a.balances.iso_currency_code ?? null,
           available: a.balances.available ?? null,
           current: a.balances.current ?? null,
+        });
+      }
+    } catch (err) {
+      handleItemError(item.itemId, err);
+    }
+  }
+  return out;
+}
+
+// Plaid's recurring-pattern analysis can take 20-30 s; give it generous headroom.
+const RECURRING_PLAID_TIMEOUT_MS = 40_000;
+
+export async function fetchRecurring(userId: string): Promise<ApiRecurringStream[]> {
+  const items = await itemStore.getUserItems(userId);
+  const out: ApiRecurringStream[] = [];
+  for (const item of items) {
+    try {
+      const accessToken = itemStore.decryptAccessToken(item);
+      const resp = await client().transactionsRecurringGet(
+        { access_token: accessToken },
+        { timeout: RECURRING_PLAID_TIMEOUT_MS },
+      );
+      for (const s of resp.data.outflow_streams as TransactionStream[]) {
+        if (!s.is_active || s.status === "TOMBSTONED") continue;
+        out.push({
+          id: s.stream_id,
+          name: s.merchant_name ?? s.description,
+          frequency: s.frequency,
+          // Plaid outflow amounts are positive; negate to match our sign convention
+          amount: -(s.last_amount.amount ?? 0),
+          currency: s.last_amount.iso_currency_code ?? null,
+          isActive: s.is_active,
         });
       }
     } catch (err) {
@@ -150,6 +183,11 @@ function handleItemError(itemId: string, err: unknown): void {
   if (code === "ITEM_LOGIN_REQUIRED") {
     void itemStore.setStatus(itemId, "login_required");
     logger.warn({ itemId }, "[plaid] item needs re-auth (ITEM_LOGIN_REQUIRED)");
+    return;
+  }
+  // PRODUCT_NOT_READY means Plaid hasn't finished indexing yet; return empty data.
+  if (code === "PRODUCT_NOT_READY") {
+    logger.info({ itemId }, "[plaid] recurring not ready yet");
     return;
   }
   logger.error({ itemId, code }, "[plaid] item error");

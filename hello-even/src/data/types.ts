@@ -24,6 +24,15 @@ export interface Transaction {
   category: string | null;
 }
 
+export interface RecurringStream {
+  id: string;
+  name: string;
+  frequency: string; // WEEKLY | BIWEEKLY | SEMI_MONTHLY | MONTHLY | ANNUALLY | UNKNOWN
+  amount: number; // negative = spend
+  currency: string | null;
+  isActive: boolean;
+}
+
 export interface BalancesResponse {
   mode: Mode;
   accounts: Account[];
@@ -32,4 +41,9 @@ export interface BalancesResponse {
 export interface TransactionsResponse {
   mode: Mode;
   transactions: Transaction[];
+}
+
+export interface RecurringResponse {
+  mode: Mode;
+  outflow: RecurringStream[];
 }

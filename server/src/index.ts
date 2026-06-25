@@ -9,6 +9,7 @@ import { pool } from "./db/client";
 import { requireDevice } from "./middleware/auth";
 import { balancesRouter } from "./routes/balances";
 import { transactionsRouter } from "./routes/transactions";
+import { recurringRouter } from "./routes/recurring";
 import { linkRouter } from "./routes/link";
 import { onboardingRouter } from "./routes/onboarding";
 import { deviceAuthRouter } from "./routes/deviceAuth";
@@ -71,6 +72,7 @@ app.use("/api", linkRouter);
 // Glasses data endpoints — device-token auth, per-user.
 app.use("/api", requireDevice, balancesRouter);
 app.use("/api", requireDevice, transactionsRouter);
+app.use("/api", requireDevice, recurringRouter);
 
 // Central error handler: logs the real error and returns JSON (not HTML).
 app.use(

@@ -1,6 +1,6 @@
 import { waitForEvenAppBridge, OsEventTypeList } from "@evenrealities/even_hub_sdk";
 import { POST_PAIR_RETRIES, POST_PAIR_RETRY_MS, DEV_MODE } from "./config";
-import { getBalances, getTransactions, UnauthorizedError } from "./data/bankApi";
+import { getBalances, getTransactions, getRecurring, UnauthorizedError } from "./data/bankApi";
 import {
   loadDeviceToken,
   persistDeviceToken,
@@ -14,8 +14,10 @@ import {
   initialState,
   withAccounts,
   withTransactions,
+  withRecurring,
   withAccountsPhase,
   withTransactionsPhase,
+  withRecurringPhase,
   navigate,
   selectTransaction,
   selectedTransaction,
@@ -30,12 +32,9 @@ import {
 import {
   balanceContainer,
   balanceContent,
-  balanceHintContainer,
-  balanceHint,
+  balanceNavList,
   BALANCE_ID,
   BALANCE_NAME,
-  BALANCE_HINT_ID,
-  BALANCE_HINT_NAME,
 } from "./ui/balanceScreen";
 import {
   txnTitleContainer,
@@ -45,6 +44,14 @@ import {
   txnEmptyContainer,
   txnEmptyMessage,
 } from "./ui/transactionsScreen";
+import {
+  recurringTitleContainer,
+  recurringTitle,
+  recurringRows,
+  recurringListContainer,
+  recurringEmptyContainer,
+  recurringEmptyMessage,
+} from "./ui/recurringScreen";
 import { detailContainer, detailContent } from "./ui/detailScreen";
 import { pairingContainer, pairingContent, pairingStatus } from "./ui/pairingScreen";
 
@@ -54,11 +61,21 @@ initRender(bridge);
 let state: AppState = initialState;
 let pairingStart: PairingStart | null = null;
 let pairingMessage: string | null = null;
+// Tracks whether the nav list has been rendered at least once.
+// In dev mode fixtures arrive synchronously so it's true from the start.
+let navShown = DEV_MODE;
 
 await loadDeviceToken(bridge);
 
 // No persistence cache: bank data is never seeded from storage. The app opens
 // in its "loading" state and shows balances only once the first live fetch returns.
+
+// True once balances and transactions have settled (ready or offline).
+// Recurring is deliberately excluded — it can take 20-30 s on a fresh Plaid item
+// and must not gate the nav list that launches both screens.
+function allDataFetched(s: AppState): boolean {
+  return s.accountsPhase !== "loading" && s.txnsPhase !== "loading";
+}
 
 function buildContainers(s: AppState): PageContainers {
   if (s.screen === "pairing") {
@@ -68,6 +85,15 @@ function buildContainers(s: AppState): PageContainers {
         ? pairingContent(pairingStart)
         : pairingStatus("Starting…");
     return { text: [pairingContainer(content)] };
+  }
+  if (s.screen === "recurring") {
+    if (s.recurringStreams.length === 0) {
+      return { text: [recurringEmptyContainer(recurringEmptyMessage(s))] };
+    }
+    return {
+      text: [recurringTitleContainer(recurringTitle(s))],
+      list: [recurringListContainer(recurringRows(s))],
+    };
   }
   if (s.screen === "transactions") {
     if (s.transactions.length === 0) {
@@ -81,11 +107,10 @@ function buildContainers(s: AppState): PageContainers {
   if (s.screen === "detail") {
     return { text: [detailContainer(detailContent(selectedTransaction(s)))] };
   }
+  const showNav = DEV_MODE || allDataFetched(s);
   return {
-    text: [
-      balanceContainer(balanceContent(s)),
-      balanceHintContainer(balanceHint(s)),
-    ],
+    text: [balanceContainer(balanceContent(s))],
+    ...(showNav ? { list: [balanceNavList()] } : {}),
   };
 }
 
@@ -97,12 +122,14 @@ const result = await createPage(buildContainers(state));
 console.log("Page created:", result === 0 ? "success" : `failed(${result})`);
 
 function render(prevScreen?: Screen): void {
-  if (state.screen === "balance" && prevScreen === "balance") {
+  const nowReady = DEV_MODE || allDataFetched(state);
+  if (state.screen === "balance" && prevScreen === "balance" && navShown && nowReady) {
+    // Nav already visible and data still ready; only the text needs updating.
     upgradeText(BALANCE_ID, BALANCE_NAME, balanceContent(state));
-    upgradeText(BALANCE_HINT_ID, BALANCE_HINT_NAME, balanceHint(state));
   } else {
     rebuild(buildContainers(state));
   }
+  navShown = navShown || nowReady;
 }
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -150,8 +177,22 @@ async function refreshTransactions(): Promise<void> {
   }
 }
 
+async function refreshRecurring(): Promise<void> {
+  const prev = state.screen;
+  try {
+    const streams = await getRecurring();
+    state = withRecurring(state, streams);
+    render(prev);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return void handleUnauthorized();
+    console.error("recurring refresh failed:", err);
+    state = withRecurringPhase(state, "offline");
+    render(prev);
+  }
+}
+
 async function refresh(): Promise<void> {
-  await Promise.all([refreshBalances(), refreshTransactions()]);
+  await Promise.all([refreshBalances(), refreshTransactions(), refreshRecurring()]);
 }
 
 // Right after pairing the Plaid item is still settling, so poll a few times
@@ -179,8 +220,11 @@ async function beginPairing(): Promise<void> {
     pairingStart = null;
     // Fresh pairing: no data yet, so show the connecting state, then poll until
     // balances arrive.
-    state = withTransactionsPhase(
-      withAccountsPhase(navigate(state, "balance"), "loading"),
+    state = withRecurringPhase(
+      withTransactionsPhase(
+        withAccountsPhase(navigate(state, "balance"), "loading"),
+        "loading",
+      ),
       "loading",
     );
     rebuild(buildContainers(state));
@@ -217,6 +261,11 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
   if (event.listEvent) {
     const index = event.listEvent.currentSelectItemIndex ?? 0;
     const prev = state.screen;
+    if (state.screen === "balance") {
+      // 0 = TRANSACTIONS, 1 = RECURRING
+      go(index === 0 ? "transactions" : "recurring");
+      return;
+    }
     state = selectTransaction(state, index);
     render(prev);
     return;
@@ -226,14 +275,15 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
   const type = event.sysEvent.eventType ?? 0;
 
   if (type === OsEventTypeList.CLICK_EVENT) {
-    if (state.screen === "balance") go("transactions");
-    else if (state.screen === "transactions") go("balance");
+    if (state.screen === "transactions") go("balance");
+    else if (state.screen === "recurring") go("balance");
     return;
   }
 
   if (type === OsEventTypeList.DOUBLE_CLICK_EVENT) {
     if (state.screen === "detail") go("transactions");
     else if (state.screen === "transactions") go("balance");
+    else if (state.screen === "recurring") go("balance");
     else {
       void bridge.shutDownPageContainer(1);
     }

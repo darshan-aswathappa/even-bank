@@ -1,4 +1,4 @@
-import type { ApiAccount, ApiTransaction } from "../types";
+import type { ApiAccount, ApiTransaction, ApiRecurringStream } from "../types";
 
 // Plaid-shaped demo data used when no Plaid credentials are configured.
 // Mirrors the normalized shapes in types.ts so the frontend behaves identically
@@ -50,10 +50,23 @@ const TRANSACTIONS: ApiTransaction[] = [
   { id: "txn_12", accountId: "acc_credit", name: "Apple", merchant: "Apple", amount: -2.99, isoDate: "2026-06-17", pending: false, category: "Shopping" },
 ];
 
+const RECURRING: ApiRecurringStream[] = [
+  { id: "rec_01", name: "Netflix", frequency: "MONTHLY", amount: -15.49, currency: "USD", isActive: true },
+  { id: "rec_02", name: "Spotify", frequency: "MONTHLY", amount: -10.99, currency: "USD", isActive: true },
+  { id: "rec_03", name: "Amazon Prime", frequency: "MONTHLY", amount: -14.99, currency: "USD", isActive: true },
+  { id: "rec_04", name: "Apple iCloud", frequency: "MONTHLY", amount: -2.99, currency: "USD", isActive: true },
+  { id: "rec_05", name: "Con Edison", frequency: "MONTHLY", amount: -132.18, currency: "USD", isActive: true },
+  { id: "rec_06", name: "Gym Membership", frequency: "MONTHLY", amount: -49.99, currency: "USD", isActive: true },
+];
+
 export function getBalances(): ApiAccount[] {
   return ACCOUNTS;
 }
 
 export function getTransactions(): ApiTransaction[] {
   return TRANSACTIONS;
+}
+
+export function getRecurring(): ApiRecurringStream[] {
+  return RECURRING;
 }

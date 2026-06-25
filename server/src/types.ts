@@ -38,6 +38,20 @@ export interface TransactionsResponse {
   transactions: ApiTransaction[];
 }
 
+export interface ApiRecurringStream {
+  id: string;
+  name: string;
+  frequency: string; // WEEKLY | BIWEEKLY | SEMI_MONTHLY | MONTHLY | ANNUALLY | UNKNOWN
+  amount: number; // negative = spend (same sign convention as ApiTransaction)
+  currency: string | null;
+  isActive: boolean;
+}
+
+export interface RecurringResponse {
+  mode: Mode;
+  outflow: ApiRecurringStream[];
+}
+
 // Small typed error so routes can map failures to HTTP status codes.
 export class HttpError extends Error {
   constructor(
