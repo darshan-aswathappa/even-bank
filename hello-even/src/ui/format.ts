@@ -1,4 +1,4 @@
-// Pure formatting helpers for money, account labels, dates, relative time.
+// Pure formatting helpers for money, account labels, and dates.
 
 function symbol(currency: string | null): string {
   switch (currency) {
@@ -39,17 +39,6 @@ export function formatAmount(value: number, currency: string | null): string {
 
 export function accountLabel(name: string, mask: string | null): string {
   return mask ? `${name} ····${mask}` : name;
-}
-
-export function relativeTime(epochMs: number | null): string {
-  if (!epochMs) return "";
-  const s = Math.max(0, Math.floor((Date.now() - epochMs) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
 }
 
 export function formatDate(iso: string): string {

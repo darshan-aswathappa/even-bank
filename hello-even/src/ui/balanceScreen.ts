@@ -5,7 +5,7 @@
 
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import type { AppState } from "../state/store";
-import { accountLabel, formatBalance, relativeTime } from "./format";
+import { accountLabel, formatBalance } from "./format";
 import { justify, hr, measureHeight } from "./fit";
 import { CHEVRON } from "./glyphs";
 
@@ -91,13 +91,8 @@ export function balanceContent(state: AppState): string {
     ].join("\n");
   }
 
-  // Have accounts — show them, flagging the last sync as stale when offline.
-  const updated =
-    state.accountsPhase === "offline"
-      ? `offline · ${relativeTime(state.lastUpdated)}`.trim()
-      : relativeTime(state.lastUpdated);
-
-  const header = justify("BALANCE", updated, ROW_W);
+  // Have accounts — show them.
+  const header = "BALANCE";
 
   const rows = state.accounts.map((a) =>
     justify(

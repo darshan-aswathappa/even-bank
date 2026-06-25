@@ -16,7 +16,6 @@ export interface AppState {
   readonly accountsPhase: Phase;
   readonly txnsPhase: Phase;
   readonly selectedTxnIndex: number;
-  readonly lastUpdated: number | null; // epoch ms of last successful balances fetch
 }
 
 export const initialState: AppState = {
@@ -26,15 +25,10 @@ export const initialState: AppState = {
   accountsPhase: "loading",
   txnsPhase: "loading",
   selectedTxnIndex: 0,
-  lastUpdated: null,
 };
 
-export function withAccounts(
-  s: AppState,
-  accounts: Account[],
-  lastUpdated: number,
-): AppState {
-  return { ...s, accounts, lastUpdated, accountsPhase: "ready" };
+export function withAccounts(s: AppState, accounts: Account[]): AppState {
+  return { ...s, accounts, accountsPhase: "ready" };
 }
 
 export function withTransactions(

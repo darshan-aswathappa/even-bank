@@ -11,7 +11,6 @@ const env = import.meta.env;
 export const DEV_MODE = (env.VITE_DEV_MODE ?? "false") === "true";
 
 export const API_BASE_URL = (env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
-export const REFRESH_MS = Number(env.VITE_REFRESH_MS ?? 60_000);
 // Live Plaid calls (especially a transactions sync right after linking) can take
 // well over 5s, so allow generous headroom before aborting a request.
 export const REQUEST_TIMEOUT_MS = 12_000;

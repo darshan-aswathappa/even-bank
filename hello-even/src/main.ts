@@ -1,10 +1,5 @@
 import { waitForEvenAppBridge, OsEventTypeList } from "@evenrealities/even_hub_sdk";
-import {
-  REFRESH_MS,
-  POST_PAIR_RETRIES,
-  POST_PAIR_RETRY_MS,
-  DEV_MODE,
-} from "./config";
+import { POST_PAIR_RETRIES, POST_PAIR_RETRY_MS, DEV_MODE } from "./config";
 import { getBalances, getTransactions, UnauthorizedError } from "./data/bankApi";
 import {
   loadDeviceToken,
@@ -131,7 +126,7 @@ async function refreshBalances(): Promise<void> {
   const prev = state.screen;
   try {
     const accounts = await getBalances();
-    state = withAccounts(state, accounts, Date.now());
+    state = withAccounts(state, accounts);
     render(prev);
   } catch (err) {
     if (err instanceof UnauthorizedError) return void handleUnauthorized();
@@ -201,10 +196,6 @@ async function beginPairing(): Promise<void> {
 if (haveToken) void refresh();
 else void beginPairing();
 
-const refreshTimer = setInterval(() => {
-  if (state.screen !== "pairing") void refresh();
-}, REFRESH_MS);
-
 function go(screen: Screen): void {
   const prev = state.screen;
   state = navigate(state, screen);
@@ -218,7 +209,6 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
       event.sysEvent &&
       (event.sysEvent.eventType ?? 0) === OsEventTypeList.DOUBLE_CLICK_EVENT
     ) {
-      clearInterval(refreshTimer);
       void bridge.shutDownPageContainer(1);
     }
     return;
@@ -245,7 +235,6 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
     if (state.screen === "detail") go("transactions");
     else if (state.screen === "transactions") go("balance");
     else {
-      clearInterval(refreshTimer);
       void bridge.shutDownPageContainer(1);
     }
     return;
@@ -260,7 +249,6 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
     type === OsEventTypeList.SYSTEM_EXIT_EVENT ||
     type === OsEventTypeList.ABNORMAL_EXIT_EVENT
   ) {
-    clearInterval(refreshTimer);
     unsubscribe();
   }
 });
