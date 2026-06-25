@@ -102,7 +102,7 @@ export function balanceContent(state: AppState): string {
   const rows = state.accounts.map((a) =>
     justify(
       accountLabel(a.name, a.mask),
-      formatBalance(a.current, a.currency),
+      formatBalance(a.available, a.currency),
       ROW_W,
     ),
   );
