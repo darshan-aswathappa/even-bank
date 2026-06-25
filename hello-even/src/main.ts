@@ -21,12 +21,9 @@ import {
   withTransactions,
   withAccountsPhase,
   withTransactionsPhase,
-  withCache,
   navigate,
   selectTransaction,
   selectedTransaction,
-  toCache,
-  fromCache,
 } from "./state/store";
 import {
   initRender,
@@ -56,8 +53,6 @@ import {
 import { detailContainer, detailContent } from "./ui/detailScreen";
 import { pairingContainer, pairingContent, pairingStatus } from "./ui/pairingScreen";
 
-const CACHE_KEY = "evenbank.cache";
-
 const bridge = await waitForEvenAppBridge();
 initRender(bridge);
 
@@ -67,15 +62,8 @@ let pairingMessage: string | null = null;
 
 await loadDeviceToken(bridge);
 
-// Seed from cache for an instant first paint.
-try {
-  const cached = fromCache(await bridge.getLocalStorage(CACHE_KEY));
-  if (cached) {
-    state = withCache(state, cached);
-  }
-} catch (err) {
-  console.error("cache load failed:", err);
-}
+// No persistence cache: bank data is never seeded from storage. The app opens
+// in its "loading" state and shows balances only once the first live fetch returns.
 
 function buildContainers(s: AppState): PageContainers {
   if (s.screen === "pairing") {
@@ -124,10 +112,6 @@ function render(prevScreen?: Screen): void {
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function persistCache(): void {
-  void bridge.setLocalStorage(CACHE_KEY, JSON.stringify(toCache(state)));
-}
-
 // A 401 from either fetch means the device token is gone — re-pair once.
 let repairing = false;
 async function handleUnauthorized(): Promise<void> {
@@ -148,7 +132,6 @@ async function refreshBalances(): Promise<void> {
   try {
     const accounts = await getBalances();
     state = withAccounts(state, accounts, Date.now());
-    persistCache();
     render(prev);
   } catch (err) {
     if (err instanceof UnauthorizedError) return void handleUnauthorized();
@@ -163,7 +146,6 @@ async function refreshTransactions(): Promise<void> {
   try {
     const transactions = await getTransactions();
     state = withTransactions(state, transactions);
-    persistCache();
     render(prev);
   } catch (err) {
     if (err instanceof UnauthorizedError) return void handleUnauthorized();

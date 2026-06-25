@@ -11,6 +11,11 @@ export function truncate(text: string, maxPx: number): string {
   return pxTruncate(text, maxPx);
 }
 
+// Rendered pixel width of a string in the firmware font (non-monospaced).
+export function textWidth(text: string): number {
+  return getTextWidth(text);
+}
+
 // Clamp a string to a UTF-8 byte budget (list items are capped at 63 bytes by
 // the firmware). Trims whole characters so we never split a multibyte glyph.
 const encoder = new TextEncoder();

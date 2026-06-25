@@ -20,6 +20,9 @@ async function apiGet<T>(path: string): Promise<T> {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       signal: controller.signal,
+      // Bank balances/transactions must always be live — never served from any
+      // HTTP cache. Force a network hit on every request.
+      cache: "no-store",
     });
     if (res.status === 401) throw new UnauthorizedError(`401 for ${path}`);
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
