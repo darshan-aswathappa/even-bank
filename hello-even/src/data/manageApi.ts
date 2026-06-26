@@ -44,14 +44,6 @@ export async function getLinkedItems(): Promise<LinkedItem[]> {
   return (await apiFetch<ManageAccountsResponse>("/manage/accounts")).items;
 }
 
-export async function unlinkItem(itemId: string): Promise<void> {
-  if (DEV_MODE) return;
-  await apiFetch("/manage/item", {
-    method: "DELETE",
-    body: JSON.stringify({ itemId }),
-  });
-}
-
 export async function unpairGlasses(): Promise<void> {
   if (DEV_MODE) return;
   await apiFetch("/manage/device", { method: "DELETE" });

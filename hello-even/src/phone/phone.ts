@@ -7,12 +7,11 @@
 import type { PairingStart } from "../data/pairing";
 import type { Account, LinkedItem } from "../data/types";
 import { UnauthorizedError } from "../data/bankApi";
-import { getLinkedItems, unlinkItem, unpairGlasses } from "../data/manageApi";
+import { getLinkedItems, unpairGlasses } from "../data/manageApi";
 
 export interface PhoneCallbacks {
-  onUnpaired: () => void; // after the user unpairs — re-enter pairing
+  onUnpaired: () => void; // after unlink & unpair — re-enter pairing
   onReauth: () => void; // a 401 means the token is gone — re-enter pairing
-  onChanged: () => void; // a bank was unlinked — refresh the glasses too
 }
 
 let root: HTMLElement | null = null;
@@ -143,11 +142,42 @@ function renderDashboard(items: LinkedItem[]): void {
     for (const item of items) children.push(renderItem(item));
   }
 
-  const unpair = el("button", { class: "eb-btn eb-danger" }, ["Unpair glasses"]);
-  unpair.addEventListener("click", () => onUnpair(unpair));
-  children.push(el("div", { class: "eb-spacer" }), unpair);
+  // One action covers both: removing the banks and unpairing the glasses are a
+  // single "disconnect" from the wearer's point of view. It's gated behind an
+  // inline confirm since it returns them to onboarding with a fresh code.
+  children.push(el("div", { class: "eb-spacer" }), renderDisconnect());
 
   mount(el("div", { class: "eb-card" }, children));
+}
+
+// A footer that toggles in place between the single danger button and a
+// confirm/cancel pair — no native dialog (blocked in the WebView host).
+function renderDisconnect(): HTMLElement {
+  const footer = el("div", {});
+
+  const showConfirm = () => {
+    const confirm = el("button", { class: "eb-btn eb-danger" }, ["Confirm — unlink & unpair"]);
+    const cancel = el("button", { class: "eb-btn eb-secondary" }, ["Cancel"]);
+    confirm.addEventListener("click", () => onUnlinkAndUnpair(confirm, cancel));
+    cancel.addEventListener("click", showDefault);
+    footer.replaceChildren(
+      el("p", { class: "eb-fallback eb-center" }, [
+        "This removes your linked banks and unpairs the glasses.",
+      ]),
+      confirm,
+      el("div", { class: "eb-spacer" }),
+      cancel,
+    );
+  };
+
+  const showDefault = () => {
+    const start = el("button", { class: "eb-btn eb-danger" }, ["Unlink & unpair"]);
+    start.addEventListener("click", showConfirm);
+    footer.replaceChildren(start);
+  };
+
+  showDefault();
+  return footer;
 }
 
 function renderItem(item: LinkedItem): HTMLElement {
@@ -161,9 +191,6 @@ function renderItem(item: LinkedItem): HTMLElement {
       ]),
     );
   }
-  const unlink = el("button", { class: "eb-unlink" }, ["Unlink"]);
-  unlink.addEventListener("click", () => onUnlink(item.itemId, unlink));
-  head.append(unlink);
 
   const rows = item.accounts.map((a: Account) =>
     el("div", { class: "eb-acct" }, [
@@ -192,31 +219,22 @@ function showError(): void {
 
 // ---- Actions --------------------------------------------------------------
 
-async function onUnlink(itemId: string, btn: HTMLElement): Promise<void> {
-  btn.setAttribute("disabled", "true");
-  try {
-    await unlinkItem(itemId);
-  } catch (err) {
-    btn.removeAttribute("disabled");
-    if (err instanceof UnauthorizedError) return cb.onReauth();
-    btn.textContent = "Retry";
-    return;
-  }
-  cb.onChanged(); // refresh glasses balances
-  void showLinked(); // refresh the dashboard
-}
-
-async function onUnpair(btn: HTMLElement): Promise<void> {
-  btn.setAttribute("disabled", "true");
+// Unlink every bank and unpair in one server call, then re-enter pairing so the
+// wearer lands back on onboarding with a fresh code.
+async function onUnlinkAndUnpair(confirm: HTMLElement, cancel: HTMLElement): Promise<void> {
+  confirm.setAttribute("disabled", "true");
+  cancel.setAttribute("disabled", "true");
+  confirm.textContent = "Disconnecting…";
   try {
     await unpairGlasses();
   } catch (err) {
-    btn.removeAttribute("disabled");
     if (err instanceof UnauthorizedError) return cb.onUnpaired();
-    btn.textContent = "Retry";
+    confirm.removeAttribute("disabled");
+    cancel.removeAttribute("disabled");
+    confirm.textContent = "Retry";
     return;
   }
-  cb.onUnpaired(); // device token revoked — re-enter pairing
+  cb.onUnpaired(); // banks removed + device token revoked — re-enter pairing
 }
 
 // ---- Styles ---------------------------------------------------------------
@@ -225,45 +243,56 @@ let stylesInjected = false;
 function injectStyles(): void {
   if (stylesInjected) return;
   stylesInjected = true;
+  // Tokens, type scale and 4/8 spacing grid per the Even Hub phone-side
+  // (Flutter WebView host) design system. Accent (#FEF991) is used only for
+  // buttons/highlights, never as a page background.
   const css = `
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --eb-text: #FFFFFF;
+      --eb-text-dim: #8A8A8A;
+      --eb-bg: #111111;
+      --eb-surface: #1A1A1A;
+      --eb-accent: #FEF991;
+      --eb-text-on-accent: #232323;
+      --eb-danger: #FF6B6B;
+      --eb-hairline: #2A2A2A;
+      --eb-font: "FK Grotesk Neue", "Source Han Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
     body { margin: 0; }
     .eb-wrap {
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: #111; color: #fff; padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -0.01em;
+      background: var(--eb-bg); color: var(--eb-text); padding: 20px;
+      font-family: var(--eb-font);
     }
-    .eb-card { background: #1a1a1a; border-radius: 16px; padding: 28px 22px; max-width: 400px; width: 100%; }
+    .eb-card { background: var(--eb-surface); border-radius: 16px; padding: 32px 24px; max-width: 400px; width: 100%; }
     .eb-center { text-align: center; }
-    .eb-card h1 { font-size: 23px; font-weight: 600; margin: 0 0 8px; }
-    .eb-card p { font-size: 15px; line-height: 1.45; margin: 0 0 18px; }
-    .eb-dim { color: #8a8a8a; }
+    .eb-card h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .eb-card p { font-size: 16px; font-weight: 400; letter-spacing: -0.01em; line-height: 1.5; margin: 0 0 24px; }
+    .eb-dim { color: var(--eb-text-dim); }
     .eb-btn {
-      appearance: none; border: none; border-radius: 10px; background: #fef991; color: #111;
-      font-size: 16px; font-weight: 600; padding: 14px 20px; width: 100%; cursor: pointer;
+      appearance: none; border: none; border-radius: 12px; background: var(--eb-accent); color: var(--eb-text-on-accent);
+      font-family: var(--eb-font); font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+      padding: 16px 24px; width: 100%; cursor: pointer;
     }
     .eb-btn[disabled] { opacity: 0.4; cursor: default; }
-    .eb-danger { background: transparent; color: #ff6b6b; border: 1px solid #2a2a2a; }
-    .eb-spacer { height: 10px; }
-    .eb-fallback { color: #8a8a8a; font-size: 13px; line-height: 1.5; margin: 14px 0 0; }
-    .eb-fallback-url { color: #fef991; word-break: break-all; }
+    .eb-secondary { background: transparent; color: var(--eb-text); border: 1px solid var(--eb-hairline); }
+    .eb-danger { background: transparent; color: var(--eb-danger); border: 1px solid var(--eb-hairline); }
+    .eb-spacer { height: 12px; }
+    .eb-fallback { color: var(--eb-text-dim); font-size: 13px; line-height: 1.5; margin: 24px 0 0; }
+    .eb-fallback-url { color: var(--eb-accent); word-break: break-all; }
     .eb-fallback-code {
-      color: #fff; font-weight: 600; letter-spacing: 0.12em;
+      color: var(--eb-text); font-weight: 600; letter-spacing: 0.12em;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
-    .eb-item { border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
-    .eb-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .eb-inst { font-size: 16px; font-weight: 600; }
-    .eb-badge { font-size: 11px; color: #fff; background: #ff6b6b; border-radius: 6px; padding: 2px 7px; margin-left: 8px; font-weight: 600; }
-    .eb-unlink {
-      appearance: none; width: auto; padding: 6px 12px; font-size: 13px; background: transparent;
-      color: #ff6b6b; border: 1px solid #2a2a2a; border-radius: 8px; cursor: pointer;
-    }
-    .eb-unlink[disabled] { opacity: 0.4; cursor: default; }
-    .eb-acct { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 0; font-size: 14px; }
-    .eb-name { color: #fff; }
-    .eb-mask { color: #8a8a8a; font-size: 12px; margin-left: 6px; }
-    .eb-amt { color: #fff; font-variant-numeric: tabular-nums; }
+    .eb-item { border: 1px solid var(--eb-hairline); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    .eb-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .eb-inst { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+    .eb-badge { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--eb-text); background: var(--eb-danger); border-radius: 6px; padding: 2px 8px; margin-left: 8px; }
+    .eb-acct { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 0; font-size: 16px; letter-spacing: -0.01em; }
+    .eb-name { color: var(--eb-text); }
+    .eb-mask { color: var(--eb-text-dim); font-size: 13px; margin-left: 8px; }
+    .eb-amt { color: var(--eb-text); font-variant-numeric: tabular-nums; }
   `;
   document.head.append(el("style", {}, [css]));
 }

@@ -74,11 +74,10 @@ await loadDeviceToken(bridge);
 
 // Phone-side WebView UI (renders into #app — the companion-app surface). It uses
 // the same device token as the glasses data calls. Its actions feed back into
-// the glasses flow: unpair/401 re-enter pairing, an unlink refreshes balances.
+// the glasses flow: unlink & unpair (or a 401) re-enters pairing.
 initPhone({
   onUnpaired: () => void beginPairing(),
   onReauth: () => void handleUnauthorized(),
-  onChanged: () => void refresh(),
 });
 
 // No persistence cache: bank data is never seeded from storage. The app opens

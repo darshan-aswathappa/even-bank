@@ -71,12 +71,25 @@ manageRouter.delete("/manage/item", async (req, res) => {
   }
 });
 
-// DELETE /api/manage/device — unpair the glasses. Revokes the user's active
-// device token(s); the glasses' next API call 401s and re-enters pairing, and
-// the WebView returns to onboarding.
+// DELETE /api/manage/device — unlink everything and unpair the glasses. First
+// removes every linked bank (revoking the Plaid access token in live mode) so no
+// orphaned items linger after the device is gone, then revokes the user's active
+// device token(s); the glasses' next API call 401s and re-enters pairing, and the
+// WebView returns to onboarding for a fresh pairing code.
 manageRouter.delete("/manage/device", async (req, res) => {
   try {
     const userId = req.userId!;
+
+    // Unlink all banks first. Best-effort per item: a failure to remove one at
+    // Plaid must not block unpairing (the user asked to disconnect).
+    const items = await itemStore.getUserItems(userId);
+    await Promise.allSettled(
+      items.map(async (it) => {
+        if (mode === "live") await plaidService.removeItem(it.itemId);
+        await itemStore.deleteItem(it.itemId);
+      }),
+    );
+
     await db
       .update(devices)
       .set({ revokedAt: new Date() })
