@@ -38,6 +38,10 @@ function showEnterCode() {
   setSubtitle("Enter the code shown on your glasses display.");
   hide("linkStep");
   show("codeStep");
+  // Pre-fill the code when the page was opened from the glasses app deep link
+  // (e.g. /onboarding?code=XXXX-XXXX) so the wearer doesn't have to type it.
+  const prefill = new URLSearchParams(location.search).get("code");
+  if (prefill) $("code").value = prefill.trim();
 }
 function showConnectBank() {
   setTitle("Connect your bank");

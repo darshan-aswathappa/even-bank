@@ -63,27 +63,55 @@ export function showLoading(msg = "Loading…"): void {
   );
 }
 
-// Onboarding: the wearer opens a browser, enters the code shown on the glasses,
-// and links a bank. The code shown here matches the glasses display.
+// Onboarding: the setup page must run in a REAL phone browser — Plaid Link can't
+// load in a WebView-in-WebView (this companion-app UI is itself a WebView). So we
+// give the wearer a copyable setup link with the pairing code baked in; pasting
+// it into any browser opens the onboarding page with the code already filled.
 export function showOnboarding(start: PairingStart): void {
-  const steps = el("ol", { class: "eb-steps" }, [
-    el("li", {}, [
-      "Open this page in your browser:",
-      el("div", { class: "eb-url" }, [start.verificationUri]),
-    ]),
-    el("li", {}, [
-      "Enter the pairing code shown on your glasses:",
-      el("div", { class: "eb-code" }, [start.userCode]),
-    ]),
-    el("li", {}, ["Securely connect your bank account with Plaid."]),
-  ]);
+  const setupUrl = `${start.verificationUri}?code=${encodeURIComponent(start.userCode)}`;
+
+  const status = el("p", { class: "eb-fallback eb-center" }, []);
+  const setNote = (msg: string) => {
+    status.replaceChildren(document.createTextNode(msg));
+  };
+
+  const copy = el("button", { class: "eb-btn" }, ["Copy setup link"]);
+  copy.addEventListener("click", () => void copyLink(setupUrl, setNote));
+
   mount(
-    el("div", { class: "eb-card" }, [
-      el("h1", { class: "eb-center" }, ["Set up Even Bank"]),
-      el("p", { class: "eb-dim eb-center" }, ["Link a bank to see your balances on your glasses."]),
-      steps,
+    el("div", { class: "eb-card eb-center" }, [
+      el("h1", {}, ["Set up Even Bank"]),
+      el("p", { class: "eb-dim" }, [
+        "Copy the setup link and open it in your phone's browser to link a bank — your pairing code is already included.",
+      ]),
+      copy,
+      el("p", { class: "eb-fallback" }, [
+        "Or open ",
+        el("span", { class: "eb-fallback-url" }, [start.verificationUri]),
+        " and enter ",
+        el("span", { class: "eb-fallback-code" }, [start.userCode]),
+      ]),
+      status,
     ]),
   );
+}
+
+async function copyLink(url: string, note: (msg: string) => void): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const ta = el("textarea") as HTMLTextAreaElement;
+      ta.value = url;
+      document.body.append(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    note("Link copied — paste it into your browser.");
+  } catch {
+    note("Couldn't copy. Open the address shown above in your browser.");
+  }
 }
 
 // Linked dashboard: fetch and render the active banks + actions.
@@ -217,19 +245,10 @@ function injectStyles(): void {
     .eb-btn[disabled] { opacity: 0.4; cursor: default; }
     .eb-danger { background: transparent; color: #ff6b6b; border: 1px solid #2a2a2a; }
     .eb-spacer { height: 10px; }
-    .eb-steps { margin: 4px 0 18px; padding: 0; list-style: none; counter-reset: step; }
-    .eb-steps li {
-      counter-increment: step; position: relative; padding: 0 0 18px 40px;
-      color: #8a8a8a; font-size: 15px; line-height: 1.4;
-    }
-    .eb-steps li::before {
-      content: counter(step); position: absolute; left: 0; top: -2px;
-      width: 26px; height: 26px; border-radius: 50%; background: #0d0d0d; border: 1px solid #2a2a2a;
-      color: #fef991; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;
-    }
-    .eb-url { color: #fef991; font-size: 14px; margin-top: 6px; word-break: break-all; }
-    .eb-code {
-      color: #fff; font-size: 26px; font-weight: 700; letter-spacing: 0.18em; margin-top: 8px;
+    .eb-fallback { color: #8a8a8a; font-size: 13px; line-height: 1.5; margin: 14px 0 0; }
+    .eb-fallback-url { color: #fef991; word-break: break-all; }
+    .eb-fallback-code {
+      color: #fff; font-weight: 600; letter-spacing: 0.12em;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
     .eb-item { border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
