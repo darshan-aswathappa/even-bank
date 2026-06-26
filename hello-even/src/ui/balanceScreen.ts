@@ -7,7 +7,7 @@ import {
   ListItemContainerProperty,
 } from "@evenrealities/even_hub_sdk";
 import type { AppState } from "../state/store";
-import { accountLabel, formatBalance, formatAmount } from "./format";
+import { accountLabel, formatBalance } from "./format";
 import { justify, hr, measureHeight } from "./fit";
 
 export const BALANCE_ID = 1;
@@ -64,18 +64,6 @@ export function balanceNavList(): ListContainerProperty {
   });
 }
 
-// Sum all spend (negative amounts) from today in local time. Includes pending
-// transactions per product requirement. Returns null when no spend exists today.
-function todaySpend(state: AppState): number | null {
-  if (state.txnsPhase !== "ready") return null;
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const spend = state.transactions
-    .filter((t) => t.isoDate === today && t.amount < 0)
-    .reduce((sum, t) => sum + t.amount, 0);
-  return spend < 0 ? spend : null;
-}
-
 export function balanceContent(state: AppState): string {
   const rule = hr(INNER_W);
 
@@ -118,16 +106,6 @@ export function balanceContent(state: AppState): string {
 
   const hidden = rows.length - shown.length;
   const tail = hidden > 0 ? [`+${hidden} more`] : [];
-
-  // TODAY row: show only when all accounts fit and there is spending today.
-  const spend = todaySpend(state);
-  if (spend !== null && hidden === 0) {
-    const todayRow = justify("TODAY", formatAmount(spend, null), ROW_W);
-    const withToday = [header, rule, ...shown, todayRow].join("\n");
-    if (measureHeight(withToday, INNER_W) <= TOP_AVAIL) {
-      return withToday;
-    }
-  }
 
   return [header, rule, ...shown, ...tail].join("\n");
 }

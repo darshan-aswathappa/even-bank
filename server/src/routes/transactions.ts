@@ -12,9 +12,11 @@ export const transactionsRouter = Router();
 const MAX_TRANSACTIONS = 20;
 
 // GET /api/transactions?account_id=... -> the user's latest transactions.
-// Served from our cache table (populated by webhooks in prod). As a dev
-// fallback when webhooks can't reach localhost, we sync on read if the cache
-// is empty for this user.
+// Always syncs via the Plaid cursor before reading from cache. The incremental
+// cursor-based sync is fast (near-instant when nothing has changed) so the
+// added latency is minimal. This is essential for pending transactions: they
+// appear in Plaid's transactionsSync `added` array and would be invisible if
+// we only synced on webhook delivery (which never reaches localhost in dev).
 transactionsRouter.get("/transactions", async (req, res) => {
   try {
     const userId = req.userId!;
@@ -30,13 +32,12 @@ transactionsRouter.get("/transactions", async (req, res) => {
       return;
     }
 
-    let rows = await readCache(userId, accountId);
-    if (rows.length === 0) {
-      // Dev fallback: no webhook has populated the cache yet — sync now.
-      const items = await itemStore.getUserItems(userId);
-      for (const item of items) await plaidService.syncItemTransactions(item.itemId);
-      rows = await readCache(userId, accountId);
-    }
+    // Sync all items in parallel. Each call advances the cursor so posted and
+    // pending transactions are always current, not just on first load.
+    const items = await itemStore.getUserItems(userId);
+    await Promise.all(items.map((item) => plaidService.syncItemTransactions(item.itemId)));
+
+    const rows = await readCache(userId, accountId);
     res.json({ mode, transactions: rows } satisfies TransactionsResponse);
   } catch (err) {
     console.error("[transactions] error:", err);
@@ -51,11 +52,13 @@ async function readCache(
   const where = accountId
     ? and(eq(transactions.userId, userId), eq(transactions.accountId, accountId))
     : eq(transactions.userId, userId);
+  // Pending-first within the same date so they are never crowded out by the
+  // 20-row limit when many posted transactions exist.
   const rows = await db
     .select()
     .from(transactions)
     .where(where)
-    .orderBy(desc(transactions.isoDate))
+    .orderBy(desc(transactions.pending), desc(transactions.isoDate))
     .limit(MAX_TRANSACTIONS);
   return rows.map((r) => ({
     id: r.id,
