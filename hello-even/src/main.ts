@@ -96,7 +96,7 @@ function buildContainers(s: AppState): PageContainers {
     const content = pairingMessage
       ? pairingStatus(pairingMessage)
       : pairingStart
-        ? pairingContent(pairingStart)
+        ? pairingContent()
         : pairingStatus("Starting…");
     return { text: [pairingContainer(content)] };
   }

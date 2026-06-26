@@ -82,7 +82,6 @@ export function showOnboarding(start: PairingStart): void {
       el("h1", { class: "eb-center" }, ["Set up Even Bank"]),
       el("p", { class: "eb-dim eb-center" }, ["Link a bank to see your balances on your glasses."]),
       steps,
-      el("p", { class: "eb-wait" }, ["Waiting for you to finish linking…"]),
     ]),
   );
 }
@@ -233,7 +232,6 @@ function injectStyles(): void {
       color: #fff; font-size: 26px; font-weight: 700; letter-spacing: 0.18em; margin-top: 8px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
-    .eb-wait { color: #8a8a8a; font-size: 13px; text-align: center; margin: 4px 0 0; }
     .eb-item { border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
     .eb-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .eb-inst { font-size: 16px; font-weight: 600; }

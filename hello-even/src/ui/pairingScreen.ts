@@ -3,7 +3,6 @@
 // text container (double-tap exits).
 
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
-import type { PairingStart } from "../data/pairing";
 import { CHEVRON } from "./glyphs";
 
 export const PAIRING_ID = 1;
@@ -26,16 +25,13 @@ export function pairingContainer(content: string): TextContainerProperty {
   });
 }
 
-// The glasses show only the pairing code (the focus) and where to enter it.
-// The phone's onboarding page owns the step-by-step instructions.
-export function pairingContent(start: PairingStart): string {
+// Once pairing has started, the phone's onboarding page owns the code and the
+// step-by-step instructions. The glasses just wait for the wearer to finish.
+export function pairingContent(): string {
   return [
     "EVEN BANK",
     "",
-    `    ${start.userCode}`,
-    "",
-    "Enter this code at",
-    `${start.verificationUri}`,
+    "Waiting for you to finish linking…",
     "",
     `${CHEVRON}${CHEVRON} exit`,
   ].join("\n");
