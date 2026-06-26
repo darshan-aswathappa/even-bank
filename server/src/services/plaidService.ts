@@ -138,22 +138,32 @@ export async function fetchBalances(userId: string): Promise<ApiAccount[]> {
 
 // Plaid's recurring-pattern analysis can take 20-30 s; give it generous headroom.
 const RECURRING_PLAID_TIMEOUT_MS = 40_000;
+// Retry up to 3 times when Plaid hasn't finished indexing yet.
+const RECURRING_RETRY_ATTEMPTS = 3;
+const RECURRING_RETRY_DELAY_MS = 5_000;
 
-export async function fetchRecurring(userId: string): Promise<ApiRecurringStream[]> {
-  const items = await itemStore.getUserItems(userId);
-  const out: ApiRecurringStream[] = [];
-  for (const item of items) {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchRecurringForItem(
+  accessToken: string,
+  itemId: string,
+): Promise<ApiRecurringStream[]> {
+  for (let attempt = 0; attempt <= RECURRING_RETRY_ATTEMPTS; attempt++) {
     try {
-      const accessToken = itemStore.decryptAccessToken(item);
       const resp = await client().transactionsRecurringGet(
         { access_token: accessToken },
         { timeout: RECURRING_PLAID_TIMEOUT_MS },
       );
       const streams = resp.data.outflow_streams as TransactionStream[];
-      logger.info({ itemId: item.itemId, total: streams.length }, "[plaid] recurring streams returned");
-      for (const s of streams) {
-        if (!s.is_active || s.status === "TOMBSTONED") continue;
-        out.push({
+      logger.info(
+        { itemId, total: streams.length, attempt },
+        "[plaid] recurring streams returned",
+      );
+      return streams
+        .filter((s) => s.is_active && s.status !== "TOMBSTONED")
+        .map((s) => ({
           id: s.stream_id,
           name: s.merchant_name ?? s.description,
           frequency: s.frequency,
@@ -161,13 +171,32 @@ export async function fetchRecurring(userId: string): Promise<ApiRecurringStream
           amount: -(s.last_amount.amount ?? 0),
           currency: s.last_amount.iso_currency_code ?? null,
           isActive: s.is_active,
-        });
-      }
+        }));
     } catch (err) {
-      handleItemError(item.itemId, err);
+      const code = plaidErrorCode(err);
+      if (code === "PRODUCT_NOT_READY" && attempt < RECURRING_RETRY_ATTEMPTS) {
+        logger.warn(
+          { itemId, attempt, nextIn: RECURRING_RETRY_DELAY_MS },
+          "[plaid] recurring PRODUCT_NOT_READY — retrying",
+        );
+        await sleep(RECURRING_RETRY_DELAY_MS);
+        continue;
+      }
+      handleItemError(itemId, err);
+      return [];
     }
   }
-  return out;
+  return [];
+}
+
+export async function fetchRecurring(userId: string): Promise<ApiRecurringStream[]> {
+  const items = await itemStore.getUserItems(userId);
+  const results = await Promise.all(
+    items.map((item) =>
+      fetchRecurringForItem(itemStore.decryptAccessToken(item), item.itemId),
+    ),
+  );
+  return results.flat();
 }
 
 // Pull transactions/sync for one item into the cache table.

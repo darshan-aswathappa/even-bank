@@ -40,8 +40,8 @@ export async function getBalances(): Promise<Account[]> {
 }
 
 // Plaid's recurring-pattern analysis can take 20-30 s on a production item.
-// Use a longer timeout than the default to avoid false "Can't load" errors.
-const RECURRING_TIMEOUT_MS = 45_000;
+// The server retries up to 3× on PRODUCT_NOT_READY (3 × 5 s + Plaid call).
+const RECURRING_TIMEOUT_MS = 75_000;
 
 export async function getRecurring(): Promise<RecurringStream[]> {
   if (DEV_MODE) return DEV_RECURRING;
