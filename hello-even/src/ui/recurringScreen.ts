@@ -19,15 +19,18 @@ export const REC_LIST_NAME = "reclist";
 const TITLE_H = 40;
 const ITEM_MAX_BYTES = 62;
 const ROW_MAX_PX = 552;
+const ITEM_H = 40; // matches SDK item height (balanceScreen: 80px / 2 items)
+const MAX_VISIBLE = 6; // items shown before list scrolls
 
-export function recurringTitleContainer(content: string): TextContainerProperty {
+export function recurringTitleContainer(
+  content: string,
+): TextContainerProperty {
   return new TextContainerProperty({
     xPosition: 0,
     yPosition: 0,
     width: 576,
     height: TITLE_H,
-    borderWidth: 1,
-    borderColor: 9,
+    borderWidth: 0,
     borderRadius: 2,
     paddingLength: 8,
     containerID: REC_TITLE_ID,
@@ -53,13 +56,13 @@ export function recurringRows(state: AppState): string[] {
 }
 
 export function recurringListContainer(items: string[]): ListContainerProperty {
+  const height = Math.min(items.length, MAX_VISIBLE) * ITEM_H;
   return new ListContainerProperty({
     xPosition: 0,
     yPosition: TITLE_H + 4,
     width: 576,
-    height: 288 - TITLE_H - 4,
-    borderWidth: 1,
-    borderColor: 6,
+    height,
+    borderWidth: 0,
     borderRadius: 2,
     paddingLength: 0,
     containerID: REC_LIST_ID,
@@ -82,7 +85,9 @@ export function recurringEmptyMessage(state: AppState): string {
   return "No recurring charges found.\nCheck back after more transactions.";
 }
 
-export function recurringEmptyContainer(message: string): TextContainerProperty {
+export function recurringEmptyContainer(
+  message: string,
+): TextContainerProperty {
   return new TextContainerProperty({
     xPosition: 0,
     yPosition: 0,

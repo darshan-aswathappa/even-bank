@@ -18,6 +18,7 @@ export interface AppState {
   readonly txnsPhase: Phase;
   readonly recurringPhase: Phase;
   readonly selectedTxnIndex: number;
+  readonly detailOrigin: Screen;
 }
 
 export const initialState: AppState = {
@@ -29,6 +30,7 @@ export const initialState: AppState = {
   txnsPhase: "loading",
   recurringPhase: "loading",
   selectedTxnIndex: 0,
+  detailOrigin: "transactions",
 };
 
 export function withAccounts(s: AppState, accounts: Account[]): AppState {
@@ -63,7 +65,7 @@ export function navigate(s: AppState, screen: Screen): AppState {
 }
 
 export function selectTransaction(s: AppState, index: number): AppState {
-  return { ...s, screen: "detail", selectedTxnIndex: index };
+  return { ...s, screen: "detail", selectedTxnIndex: index, detailOrigin: s.screen };
 }
 
 export function selectedTransaction(s: AppState): Transaction | null {

@@ -300,7 +300,7 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
   }
 
   if (type === OsEventTypeList.DOUBLE_CLICK_EVENT) {
-    if (state.screen === "detail") go("transactions");
+    if (state.screen === "detail") go(state.detailOrigin);
     else if (state.screen === "transactions") go("balance");
     else if (state.screen === "recurring") go("balance");
     else {
