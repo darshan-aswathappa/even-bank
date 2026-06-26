@@ -149,7 +149,9 @@ export async function fetchRecurring(userId: string): Promise<ApiRecurringStream
         { access_token: accessToken },
         { timeout: RECURRING_PLAID_TIMEOUT_MS },
       );
-      for (const s of resp.data.outflow_streams as TransactionStream[]) {
+      const streams = resp.data.outflow_streams as TransactionStream[];
+      logger.info({ itemId: item.itemId, total: streams.length }, "[plaid] recurring streams returned");
+      for (const s of streams) {
         if (!s.is_active || s.status === "TOMBSTONED") continue;
         out.push({
           id: s.stream_id,
@@ -239,7 +241,7 @@ function handleItemError(itemId: string, err: unknown): void {
   }
   // PRODUCT_NOT_READY means Plaid hasn't finished indexing yet; return empty data.
   if (code === "PRODUCT_NOT_READY") {
-    logger.info({ itemId }, "[plaid] recurring not ready yet");
+    logger.warn({ itemId }, "[plaid] recurring PRODUCT_NOT_READY — Plaid is still indexing, streams will appear once ready");
     return;
   }
   logger.error({ itemId, code }, "[plaid] item error");
