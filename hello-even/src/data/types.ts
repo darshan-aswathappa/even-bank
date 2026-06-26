@@ -47,3 +47,16 @@ export interface RecurringResponse {
   mode: Mode;
   outflow: RecurringStream[];
 }
+
+// A linked bank (Plaid item) plus its accounts — for the phone-side manage UI.
+export interface LinkedItem {
+  itemId: string;
+  institution: string | null;
+  status: string; // good | login_required | error
+  accounts: Account[];
+}
+
+export interface ManageAccountsResponse {
+  mode: Mode;
+  items: LinkedItem[];
+}

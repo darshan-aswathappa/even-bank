@@ -33,6 +33,20 @@ export interface BalancesResponse {
   accounts: ApiAccount[];
 }
 
+// A linked bank (Plaid item) plus the accounts under it, for the phone
+// management dashboard. Unlinking happens at the item level.
+export interface ItemWithAccounts {
+  itemId: string;
+  institution: string | null;
+  status: string; // good | login_required | error
+  accounts: ApiAccount[];
+}
+
+export interface ManageAccountsResponse {
+  mode: Mode;
+  items: ItemWithAccounts[];
+}
+
 export interface TransactionsResponse {
   mode: Mode;
   transactions: ApiTransaction[];

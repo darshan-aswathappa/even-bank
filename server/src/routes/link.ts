@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { mode } from "../config";
 import * as plaidService from "../services/plaidService";
+import * as itemStore from "../services/itemStore";
 import { requireClaim } from "../middleware/claim";
 import { db } from "../db/client";
 import { deviceAuth } from "../db/schema";
@@ -28,29 +29,40 @@ linkRouter.post("/link/token/create", requireClaim, async (req, res) => {
   }
 });
 
-// POST /api/item/public_token/exchange  { public_token }  (session)
-const exchangeSchema = z.object({ public_token: z.string().min(1) });
+// POST /api/item/public_token/exchange  { public_token, institution? }  (claim)
+const exchangeSchema = z.object({
+  public_token: z.string().min(1),
+  institution: z.string().max(120).optional(),
+});
 linkRouter.post(
   "/item/public_token/exchange",
   requireClaim,
   async (req, res) => {
     try {
       const userId = req.userId!;
-      if (mode !== "mock") {
+      if (mode === "mock") {
+        await itemStore.saveMockItem(userId);
+      } else {
         const parsed = exchangeSchema.safeParse(req.body);
         if (!parsed.success) {
           res.status(400).json({ error: "missing_public_token" });
           return;
         }
-        await plaidService.exchangePublicToken(userId, parsed.data.public_token);
+        await plaidService.exchangePublicToken(
+          userId,
+          parsed.data.public_token,
+          parsed.data.institution ?? null,
+        );
       }
 
       // Finish the pairing bound to this claim token: mark it linked so the
-      // glasses' poll can mint a device token.
+      // glasses' poll can mint a device token. The glasses' phone-side WebView
+      // then manages accounts with that device token (no separate credential).
       await db
         .update(deviceAuth)
         .set({ status: "linked" })
         .where(eq(deviceAuth.id, req.deviceAuthId!));
+
       res.json({ ok: true, mode });
     } catch (err) {
       sendErr(res, err, "public_token/exchange");

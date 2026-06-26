@@ -26,16 +26,17 @@ export function pairingContainer(content: string): TextContainerProperty {
   });
 }
 
+// The glasses show only the pairing code (the focus) and where to enter it.
+// The phone's onboarding page owns the step-by-step instructions.
 export function pairingContent(start: PairingStart): string {
   return [
-    "PAIR YOUR GLASSES",
+    "EVEN BANK",
     "",
-    "1. On your phone, open:",
-    `   ${start.verificationUri}`,
-    "2. Enter this code:",
-    `   ${start.userCode}`,
+    `    ${start.userCode}`,
     "",
-    "Waiting for you to finish…",
+    "Enter this code at",
+    `${start.verificationUri}`,
+    "",
     `${CHEVRON}${CHEVRON} exit`,
   ].join("\n");
 }

@@ -11,6 +11,7 @@ import { balancesRouter } from "./routes/balances";
 import { transactionsRouter } from "./routes/transactions";
 import { recurringRouter } from "./routes/recurring";
 import { linkRouter } from "./routes/link";
+import { manageRouter } from "./routes/manage";
 import { onboardingRouter } from "./routes/onboarding";
 import { deviceAuthRouter } from "./routes/deviceAuth";
 import { webhookRouter } from "./routes/webhook";
@@ -73,6 +74,10 @@ app.use("/api", linkRouter);
 app.use("/api", requireDevice, balancesRouter);
 app.use("/api", requireDevice, transactionsRouter);
 app.use("/api", requireDevice, recurringRouter);
+
+// Phone management dashboard — authenticated by the persistent management token
+// (a devices-table row), so requireDevice resolves it the same way.
+app.use("/api", requireDevice, manageRouter);
 
 // Central error handler: logs the real error and returns JSON (not HTML).
 app.use(

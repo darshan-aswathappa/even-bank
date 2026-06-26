@@ -10,7 +10,12 @@ import {
 } from "plaid";
 import { plaidClient } from "../plaidClient";
 import { config } from "../config";
-import { type ApiAccount, type ApiRecurringStream, HttpError } from "../types";
+import {
+  type ApiAccount,
+  type ApiRecurringStream,
+  type ItemWithAccounts,
+  HttpError,
+} from "../types";
 import * as itemStore from "./itemStore";
 import { db } from "../db/client";
 import { transactions } from "../db/schema";
@@ -50,13 +55,60 @@ export async function createLinkToken(
 export async function exchangePublicToken(
   userId: string,
   publicToken: string,
+  institution: string | null = null,
 ): Promise<{ itemId: string }> {
   const resp = await client().itemPublicTokenExchange({
     public_token: publicToken,
   });
   const itemId = resp.data.item_id;
-  await itemStore.saveItem(userId, itemId, resp.data.access_token);
+  await itemStore.saveItem(userId, itemId, resp.data.access_token, institution);
   return { itemId };
+}
+
+// Tell Plaid to forget an item (revokes the access token), so unlinking a bank
+// is complete on both sides. Best-effort: the local row is deleted regardless.
+export async function removeItem(itemId: string): Promise<void> {
+  const item = await itemStore.getItemByItemId(itemId);
+  if (!item) return;
+  const accessToken = itemStore.decryptAccessToken(item);
+  await client().itemRemove({ access_token: accessToken });
+}
+
+// Linked banks grouped by item, each with its current accounts — for the phone
+// management dashboard. An item that errors yields an empty accounts list (its
+// status reflects why) rather than failing the whole dashboard.
+export async function fetchItemsWithAccounts(
+  userId: string,
+): Promise<ItemWithAccounts[]> {
+  const items = await itemStore.getUserItems(userId);
+  const out: ItemWithAccounts[] = [];
+  for (const item of items) {
+    const accounts: ApiAccount[] = [];
+    try {
+      const accessToken = itemStore.decryptAccessToken(item);
+      const resp = await client().accountsBalanceGet({ access_token: accessToken });
+      for (const a of resp.data.accounts) {
+        accounts.push({
+          id: a.account_id,
+          name: a.name,
+          mask: a.mask ?? null,
+          subtype: a.subtype ?? null,
+          currency: a.balances.iso_currency_code ?? null,
+          available: a.balances.available ?? null,
+          current: a.balances.current ?? null,
+        });
+      }
+    } catch (err) {
+      handleItemError(item.itemId, err);
+    }
+    out.push({
+      itemId: item.itemId,
+      institution: item.institution,
+      status: item.status,
+      accounts,
+    });
+  }
+  return out;
 }
 
 export async function fetchBalances(userId: string): Promise<ApiAccount[]> {

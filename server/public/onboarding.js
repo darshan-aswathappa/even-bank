@@ -1,6 +1,7 @@
 // Onboarding flow: enter the glasses code -> link bank. No sign-in: possession
 // of the code shown on your glasses IS the authorization (RFC 8628). The claim
 // token returned by /api/device/claim authorizes the Plaid-linking calls.
+// After linking, accounts are managed from the glasses app's own phone WebView.
 // External file so it's allowed under CSP script-src 'self' (no unsafe-inline).
 
 const $ = (id) => document.getElementById(id);
@@ -81,9 +82,12 @@ $("linkBtn").addEventListener("click", async () => {
   }
   const handler = Plaid.create({
     token: r.data.link_token,
-    onSuccess: async (publicToken) => {
+    onSuccess: async (publicToken, metadata) => {
       setStatus("Linking…");
-      const ex = await api("/api/item/public_token/exchange", { public_token: publicToken });
+      const ex = await api("/api/item/public_token/exchange", {
+        public_token: publicToken,
+        institution: metadata?.institution?.name,
+      });
       if (ex.ok) showDone("Connected. Return to your glasses.");
       else setStatus("Link failed — try again.");
     },

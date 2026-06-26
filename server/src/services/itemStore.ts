@@ -3,7 +3,7 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { plaidItems } from "../db/schema";
+import { plaidItems, transactions } from "../db/schema";
 import { encrypt, decrypt, aad } from "../crypto/encryption";
 
 export type PlaidItemRow = typeof plaidItems.$inferSelect;
@@ -41,8 +41,38 @@ export async function saveItem(
     });
 }
 
+// Mock-mode placeholder item so the dashboard's "linked banks" + unlink flow
+// work without Plaid credentials. No KEK is configured in mock mode, so the
+// access-token columns hold empty buffers and are NEVER decrypted (mock mode
+// reads balances from the mock service, not from Plaid). One row per user.
+export async function saveMockItem(userId: string): Promise<string> {
+  const itemId = `mock-${userId}`;
+  const empty = Buffer.alloc(0);
+  await db
+    .insert(plaidItems)
+    .values({
+      userId,
+      itemId,
+      accessTokenCt: empty,
+      accessTokenIv: empty,
+      accessTokenTag: empty,
+      keyId: "mock",
+      institution: "Mock Bank",
+      status: "good",
+    })
+    .onConflictDoNothing({ target: plaidItems.itemId });
+  return itemId;
+}
+
 export async function getUserItems(userId: string): Promise<PlaidItemRow[]> {
   return db.select().from(plaidItems).where(eq(plaidItems.userId, userId));
+}
+
+// Remove a linked bank locally: its cached transactions first (no DB cascade
+// from plaid_items to transactions), then the item row itself.
+export async function deleteItem(itemId: string): Promise<void> {
+  await db.delete(transactions).where(eq(transactions.itemId, itemId));
+  await db.delete(plaidItems).where(eq(plaidItems.itemId, itemId));
 }
 
 export async function getItemByItemId(

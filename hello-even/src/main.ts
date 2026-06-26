@@ -54,6 +54,11 @@ import {
 } from "./ui/recurringScreen";
 import { detailContainer, detailContent } from "./ui/detailScreen";
 import { pairingContainer, pairingContent, pairingStatus } from "./ui/pairingScreen";
+import {
+  initPhone,
+  showOnboarding as phoneOnboarding,
+  showLinked as phoneLinked,
+} from "./phone/phone";
 
 const bridge = await waitForEvenAppBridge();
 initRender(bridge);
@@ -66,6 +71,15 @@ let pairingMessage: string | null = null;
 let navShown = DEV_MODE;
 
 await loadDeviceToken(bridge);
+
+// Phone-side WebView UI (renders into #app — the companion-app surface). It uses
+// the same device token as the glasses data calls. Its actions feed back into
+// the glasses flow: unpair/401 re-enter pairing, an unlink refreshes balances.
+initPhone({
+  onUnpaired: () => void beginPairing(),
+  onReauth: () => void handleUnauthorized(),
+  onChanged: () => void refresh(),
+});
 
 // No persistence cache: bank data is never seeded from storage. The app opens
 // in its "loading" state and shows balances only once the first live fetch returns.
@@ -215,6 +229,7 @@ async function beginPairing(): Promise<void> {
     pairingStart = await startPairing();
     pairingMessage = null;
     rebuild(buildContainers(state)); // show the user code
+    phoneOnboarding(pairingStart); // show matching instructions on the phone
     const token = await pollForToken(pairingStart);
     await persistDeviceToken(bridge, token);
     pairingStart = null;
@@ -228,6 +243,7 @@ async function beginPairing(): Promise<void> {
       "loading",
     );
     rebuild(buildContainers(state));
+    void phoneLinked(); // switch the phone UI to the accounts dashboard
     await refreshAfterPairing();
   } catch (err) {
     console.error("pairing failed:", err);
@@ -237,8 +253,12 @@ async function beginPairing(): Promise<void> {
 }
 
 // Kick off.
-if (haveToken) void refresh();
-else void beginPairing();
+if (haveToken) {
+  void refresh();
+  void phoneLinked(); // already paired — show the accounts dashboard on the phone
+} else {
+  void beginPairing();
+}
 
 function go(screen: Screen): void {
   const prev = state.screen;
