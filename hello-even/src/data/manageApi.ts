@@ -48,3 +48,24 @@ export async function unpairGlasses(): Promise<void> {
   if (DEV_MODE) return;
   await apiFetch("/manage/device", { method: "DELETE" });
 }
+
+// Request a short-lived add-bank URL from the server. The user opens it in
+// their phone browser (Plaid Link cannot run inside the Even companion WebView).
+export async function startAddBank(): Promise<{ addBankUrl: string }> {
+  if (DEV_MODE) {
+    return { addBankUrl: "http://localhost:8787/add-bank.html?token=dev-mode" };
+  }
+  return apiFetch<{ addBankUrl: string }>("/manage/link/start", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+// Unlink (remove) a single Plaid item by its itemId.
+export async function unlinkItem(itemId: string): Promise<void> {
+  if (DEV_MODE) return;
+  await apiFetch("/manage/item", {
+    method: "DELETE",
+    body: JSON.stringify({ itemId }),
+  });
+}

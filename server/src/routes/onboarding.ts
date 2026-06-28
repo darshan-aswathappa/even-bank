@@ -12,3 +12,12 @@ onboardingRouter.get("/onboarding", (_req, res) => {
 onboardingRouter.get("/onboarding.js", (_req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "onboarding.js"));
 });
+
+// Add-another-bank page (authenticated via short-lived add-bank JWT in URL).
+onboardingRouter.get("/add-bank.html", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "add-bank.html"));
+});
+
+onboardingRouter.get("/add-bank.js", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "add-bank.js"));
+});

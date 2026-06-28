@@ -7,11 +7,13 @@
 import type { PairingStart } from "../data/pairing";
 import type { Account, LinkedItem } from "../data/types";
 import { UnauthorizedError } from "../data/bankApi";
-import { getLinkedItems, unpairGlasses } from "../data/manageApi";
+import { getLinkedItems, unpairGlasses, startAddBank, unlinkItem } from "../data/manageApi";
+import { isHidden, toggleHidden } from "../data/hiddenAccounts";
 
 export interface PhoneCallbacks {
   onUnpaired: () => void; // after unlink & unpair — re-enter pairing
   onReauth: () => void; // a 401 means the token is gone — re-enter pairing
+  onBanksUpdated: () => void; // after any successful add/remove — refresh glasses
 }
 
 let root: HTMLElement | null = null;
@@ -113,7 +115,8 @@ async function copyLink(url: string, note: (msg: string) => void): Promise<void>
   }
 }
 
-// Linked dashboard: fetch and render the active banks + actions.
+// Linked dashboard: fetch and render the active banks + actions. Also signals
+// main.ts to refresh the glasses display so new/removed banks appear immediately.
 export async function showLinked(): Promise<void> {
   showLoading("Loading your accounts…");
   let items: LinkedItem[];
@@ -128,6 +131,7 @@ export async function showLinked(): Promise<void> {
     return;
   }
   renderDashboard(items);
+  cb.onBanksUpdated();
 }
 
 function renderDashboard(items: LinkedItem[]): void {
@@ -142,10 +146,12 @@ function renderDashboard(items: LinkedItem[]): void {
     for (const item of items) children.push(renderItem(item));
   }
 
-  // One action covers both: removing the banks and unpairing the glasses are a
-  // single "disconnect" from the wearer's point of view. It's gated behind an
-  // inline confirm since it returns them to onboarding with a fresh code.
-  children.push(el("div", { class: "eb-spacer" }), renderDisconnect());
+  children.push(
+    el("div", { class: "eb-spacer" }),
+    renderAddBank(),
+    el("div", { class: "eb-spacer" }),
+    renderDisconnect(),
+  );
 
   mount(el("div", { class: "eb-card" }, children));
 }
@@ -180,6 +186,51 @@ function renderDisconnect(): HTMLElement {
   return footer;
 }
 
+// "Add another bank" section: requests a short-lived URL, then lets the user
+// copy it and open it in their real phone browser (same constraint as onboarding).
+function renderAddBank(): HTMLElement {
+  const wrap = el("div", {});
+  const status = el("p", { class: "eb-add-bank-status eb-dim" }, []);
+
+  const showDefault = () => {
+    const btn = el("button", { class: "eb-btn eb-secondary" }, ["Add another bank"]);
+    btn.addEventListener("click", () => void onGetAddBankLink(btn, status));
+    status.textContent = "";
+    wrap.replaceChildren(btn, status);
+  };
+
+  showDefault();
+  return wrap;
+}
+
+async function onGetAddBankLink(btn: HTMLElement, status: HTMLElement): Promise<void> {
+  btn.setAttribute("disabled", "true");
+  btn.textContent = "Getting link…";
+  status.textContent = "";
+
+  let addBankUrl: string;
+  try {
+    ({ addBankUrl } = await startAddBank());
+  } catch (err) {
+    if (err instanceof UnauthorizedError) { cb.onReauth(); return; }
+    btn.removeAttribute("disabled");
+    btn.textContent = "Add another bank";
+    status.textContent = "Couldn't get link — try again.";
+    return;
+  }
+
+  const copyBtn = el("button", { class: "eb-btn eb-secondary" }, ["Copy add-bank link"]);
+  copyBtn.addEventListener("click", () => void copyLink(addBankUrl, (msg) => {
+    status.textContent = msg;
+  }));
+
+  const doneBtn = el("button", { class: "eb-btn" }, ["Done — show my accounts"]);
+  doneBtn.addEventListener("click", () => void showLinked());
+
+  status.textContent = "Open the copied link in your browser to connect a new bank.";
+  btn.replaceWith(el("div", {}, [copyBtn, el("div", { class: "eb-spacer" }), doneBtn]));
+}
+
 function renderItem(item: LinkedItem): HTMLElement {
   const head = el("div", { class: "eb-item-head" }, [
     el("span", { class: "eb-inst" }, [item.institution || "Bank"]),
@@ -192,17 +243,48 @@ function renderItem(item: LinkedItem): HTMLElement {
     );
   }
 
-  const rows = item.accounts.map((a: Account) =>
-    el("div", { class: "eb-acct" }, [
+  const rows = item.accounts.map((a: Account) => {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "eb-acct-check";
+    checkbox.checked = !isHidden(a.id);
+    checkbox.addEventListener("change", () => {
+      toggleHidden(a.id);
+    });
+
+    return el("div", { class: "eb-acct" }, [
+      checkbox,
       el("span", { class: "eb-name" }, [
         a.name,
         ...(a.mask ? [el("span", { class: "eb-mask" }, ["••" + a.mask])] : []),
       ]),
       el("span", { class: "eb-amt" }, [fmtMoney(a.available ?? a.current, a.currency)]),
-    ]),
-  );
+    ]);
+  });
 
-  return el("div", { class: "eb-item" }, [head, ...rows]);
+  return el("div", { class: "eb-item" }, [head, ...rows, renderItemUnlink(item)]);
+}
+
+// Per-bank unlink with inline confirm/cancel — no native dialog.
+function renderItemUnlink(item: LinkedItem): HTMLElement {
+  const footer = el("div", { class: "eb-item-footer" });
+
+  const showDefault = () => {
+    const btn = el("button", { class: "eb-btn-link eb-danger-link" }, ["Unlink"]);
+    btn.addEventListener("click", showConfirm);
+    footer.replaceChildren(btn);
+  };
+
+  const showConfirm = () => {
+    const confirm = el("button", { class: "eb-btn-link eb-danger-link" }, ["Confirm"]);
+    const cancel = el("button", { class: "eb-btn-link" }, ["Cancel"]);
+    confirm.addEventListener("click", () => void onUnlinkItem(item.itemId, [confirm, cancel]));
+    cancel.addEventListener("click", showDefault);
+    footer.replaceChildren(confirm, document.createTextNode(" · "), cancel);
+  };
+
+  showDefault();
+  return footer;
 }
 
 function showError(): void {
@@ -235,6 +317,18 @@ async function onUnlinkAndUnpair(confirm: HTMLElement, cancel: HTMLElement): Pro
     return;
   }
   cb.onUnpaired(); // banks removed + device token revoked — re-enter pairing
+}
+
+async function onUnlinkItem(itemId: string, buttons: HTMLElement[]): Promise<void> {
+  for (const b of buttons) b.setAttribute("disabled", "true");
+  try {
+    await unlinkItem(itemId);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) { cb.onReauth(); return; }
+    for (const b of buttons) b.removeAttribute("disabled");
+    return;
+  }
+  void showLinked(); // refresh dashboard with the item removed
 }
 
 // ---- Styles ---------------------------------------------------------------
@@ -289,10 +383,18 @@ function injectStyles(): void {
     .eb-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .eb-inst { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
     .eb-badge { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--eb-text); background: var(--eb-danger); border-radius: 6px; padding: 2px 8px; margin-left: 8px; }
-    .eb-acct { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 0; font-size: 16px; letter-spacing: -0.01em; }
+    .eb-acct { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; font-size: 16px; letter-spacing: -0.01em; gap: 10px; }
+    .eb-acct-check { appearance: none; width: 18px; height: 18px; min-width: 18px; border: 1.5px solid var(--eb-text-dim); border-radius: 4px; background: transparent; cursor: pointer; position: relative; flex-shrink: 0; }
+    .eb-acct-check:checked { background: var(--eb-accent); border-color: var(--eb-accent); }
+    .eb-acct-check:checked::after { content: ""; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: 2px solid var(--eb-text-on-accent); border-top: none; border-left: none; transform: rotate(45deg); }
     .eb-name { color: var(--eb-text); }
     .eb-mask { color: var(--eb-text-dim); font-size: 13px; margin-left: 8px; }
     .eb-amt { color: var(--eb-text); font-variant-numeric: tabular-nums; }
+    .eb-item-footer { display: flex; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--eb-hairline); margin-top: 10px; }
+    .eb-btn-link { appearance: none; background: none; border: none; padding: 0; font-family: var(--eb-font); font-size: 13px; font-weight: 500; cursor: pointer; color: var(--eb-text-dim); }
+    .eb-danger-link { color: var(--eb-danger); }
+    .eb-btn-link[disabled] { opacity: 0.4; cursor: default; }
+    .eb-add-bank-status { color: var(--eb-text-dim); font-size: 13px; min-height: 18px; margin: 8px 0 0; text-align: center; }
   `;
   document.head.append(el("style", {}, [css]));
 }

@@ -9,6 +9,7 @@ import { mode } from "../config";
 import * as plaidService from "../services/plaidService";
 import * as itemStore from "../services/itemStore";
 import { requireClaim } from "../middleware/claim";
+import { requireAddBankToken } from "../middleware/addBankToken";
 import { db } from "../db/client";
 import { deviceAuth } from "../db/schema";
 import { HttpError } from "../types";
@@ -69,6 +70,51 @@ linkRouter.post(
     }
   },
 );
+
+// POST /api/link/add/token  { token }  (add-bank JWT)
+// Issues a Plaid link token for adding a second (or further) bank, authenticated
+// by the short-lived add-bank JWT rather than the one-time claim token.
+linkRouter.post("/link/add/token", requireAddBankToken, async (req, res) => {
+  try {
+    if (mode === "mock") {
+      res.json({ mode });
+      return;
+    }
+    const linkToken = await plaidService.createLinkToken(req.userId!);
+    res.json({ mode, link_token: linkToken });
+  } catch (err) {
+    sendErr(res, err, "link/add/token");
+  }
+});
+
+// POST /api/link/add/exchange  { token, public_token, institution? }  (add-bank JWT)
+const addExchangeSchema = z.object({
+  public_token: z.string().min(1),
+  institution: z.string().max(120).optional(),
+});
+linkRouter.post("/link/add/exchange", requireAddBankToken, async (req, res) => {
+  try {
+    const userId = req.userId!;
+    if (mode === "mock") {
+      await itemStore.saveMockItem(userId);
+      res.json({ ok: true, mode });
+      return;
+    }
+    const parsed = addExchangeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "missing_public_token" });
+      return;
+    }
+    await plaidService.exchangePublicToken(
+      userId,
+      parsed.data.public_token,
+      parsed.data.institution ?? null,
+    );
+    res.json({ ok: true, mode });
+  } catch (err) {
+    sendErr(res, err, "link/add/exchange");
+  }
+});
 
 function sendErr(res: import("express").Response, err: unknown, ctx: string) {
   if (err instanceof HttpError) {

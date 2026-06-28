@@ -7,15 +7,31 @@
 import { Router } from "express";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
-import { mode } from "../config";
+import { mode, config } from "../config";
 import { db } from "../db/client";
 import { devices } from "../db/schema";
 import * as itemStore from "../services/itemStore";
 import * as plaidService from "../services/plaidService";
 import * as mockService from "../services/mockService";
 import { type ManageAccountsResponse, HttpError } from "../types";
+import { signAddBankToken } from "../middleware/addBankToken";
 
 export const manageRouter = Router();
+
+// POST /api/manage/link/start — issue a short-lived add-bank JWT and return the
+// URL the user opens in their phone browser to connect another bank.
+manageRouter.post("/manage/link/start", async (req, res) => {
+  try {
+    const userId = req.userId!;
+    const token = await signAddBankToken(userId);
+    // Use a hash fragment so the token is never sent to the server in HTTP
+    // requests and does not appear in access logs.
+    const addBankUrl = `${config.publicBaseUrl}/add-bank.html#token=${encodeURIComponent(token)}`;
+    res.json({ addBankUrl });
+  } catch (err) {
+    sendErr(res, err, "manage/link/start");
+  }
+});
 
 // GET /api/manage/accounts
 manageRouter.get("/manage/accounts", async (req, res) => {

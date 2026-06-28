@@ -4,5 +4,7 @@
 // Tap-count affordance: one CHEVRON = single tap, two = double tap. `▶` is from
 // the firmware-supported navigation set (per Even design guidelines), unlike the
 // old `●` which the guidelines reserve for selection state.
-export const CHEVRON = "▶"; // single-tap indicator
-export const MIDDOT = "·"; // inline separator
+export const CHEVRON = "▶";  // single-tap indicator
+export const MIDDOT = "·";   // inline separator
+export const SCROLL_UP = "▲";   // page-up affordance (navigation set per design guidelines)
+export const SCROLL_DOWN = "▼"; // page-down affordance

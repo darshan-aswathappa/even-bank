@@ -1,6 +1,6 @@
 import { waitForEvenAppBridge, OsEventTypeList } from "@evenrealities/even_hub_sdk";
 import { POST_PAIR_RETRIES, POST_PAIR_RETRY_MS, DEV_MODE } from "./config";
-import { getBalances, getTransactions, getRecurring, UnauthorizedError } from "./data/bankApi";
+import { getLinkedItems, getTransactions, getRecurring, UnauthorizedError } from "./data/bankApi";
 import {
   loadDeviceToken,
   persistDeviceToken,
@@ -12,7 +12,8 @@ import {
   type AppState,
   type Screen,
   initialState,
-  withAccounts,
+  withLinkedItems,
+  withBalancePage,
   withTransactions,
   withRecurring,
   withAccountsPhase,
@@ -26,15 +27,14 @@ import {
   initRender,
   createPage,
   rebuild,
-  upgradeText,
   type PageContainers,
 } from "./bridge/render";
 import {
   balanceContainer,
   balanceContent,
-  balanceNavList,
-  BALANCE_ID,
-  BALANCE_NAME,
+  balanceTotalPages,
+  balanceEmptyContainer,
+  balanceEmptyMessage,
 } from "./ui/balanceScreen";
 import {
   txnTitleContainer,
@@ -59,6 +59,7 @@ import {
   showOnboarding as phoneOnboarding,
   showLinked as phoneLinked,
 } from "./phone/phone";
+import { setOnHiddenChange } from "./data/hiddenAccounts";
 
 const bridge = await waitForEvenAppBridge();
 initRender(bridge);
@@ -66,9 +67,6 @@ initRender(bridge);
 let state: AppState = initialState;
 let pairingStart: PairingStart | null = null;
 let pairingMessage: string | null = null;
-// Tracks whether the nav list has been rendered at least once.
-// In dev mode fixtures arrive synchronously so it's true from the start.
-let navShown = DEV_MODE;
 
 await loadDeviceToken(bridge);
 
@@ -78,17 +76,11 @@ await loadDeviceToken(bridge);
 initPhone({
   onUnpaired: () => void beginPairing(),
   onReauth: () => void handleUnauthorized(),
+  onBanksUpdated: () => void refreshBalances(),
 });
 
 // No persistence cache: bank data is never seeded from storage. The app opens
 // in its "loading" state and shows balances only once the first live fetch returns.
-
-// True once balances and transactions have settled (ready or offline).
-// Recurring is deliberately excluded — it can take 20-30 s on a fresh Plaid item
-// and must not gate the nav list that launches both screens.
-function allDataFetched(s: AppState): boolean {
-  return s.accountsPhase !== "loading" && s.txnsPhase !== "loading";
-}
 
 function buildContainers(s: AppState): PageContainers {
   if (s.screen === "pairing") {
@@ -120,11 +112,12 @@ function buildContainers(s: AppState): PageContainers {
   if (s.screen === "detail") {
     return { text: [detailContainer(detailContent(selectedTransaction(s)))] };
   }
-  const showNav = DEV_MODE || allDataFetched(s);
-  return {
-    text: [balanceContainer(balanceContent(s))],
-    ...(showNav ? { list: [balanceNavList()] } : {}),
-  };
+  // balance screen — full-page text container with pixel-accurate justify()
+  const content = balanceContent(s);
+  if (!content) {
+    return { text: [balanceEmptyContainer(balanceEmptyMessage(s))] };
+  }
+  return { text: [balanceContainer(content)] };
 }
 
 // First paint: pairing if we have no device token yet, else Balance.
@@ -134,15 +127,8 @@ state = navigate(state, haveToken ? "balance" : "pairing");
 const result = await createPage(buildContainers(state));
 console.log("Page created:", result === 0 ? "success" : `failed(${result})`);
 
-function render(prevScreen?: Screen): void {
-  const nowReady = DEV_MODE || allDataFetched(state);
-  if (state.screen === "balance" && prevScreen === "balance" && navShown && nowReady) {
-    // Nav already visible and data still ready; only the text needs updating.
-    upgradeText(BALANCE_ID, BALANCE_NAME, balanceContent(state));
-  } else {
-    rebuild(buildContainers(state));
-  }
-  navShown = navShown || nowReady;
+function render(_prevScreen?: Screen): void {
+  rebuild(buildContainers(state));
 }
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -165,8 +151,8 @@ async function handleUnauthorized(): Promise<void> {
 async function refreshBalances(): Promise<void> {
   const prev = state.screen;
   try {
-    const accounts = await getBalances();
-    state = withAccounts(state, accounts);
+    const items = await getLinkedItems();
+    state = withLinkedItems(state, items);
     render(prev);
   } catch (err) {
     if (err instanceof UnauthorizedError) return void handleUnauthorized();
@@ -251,6 +237,9 @@ async function beginPairing(): Promise<void> {
   }
 }
 
+// Re-render the glasses whenever the phone UI toggles account visibility.
+setOnHiddenChange(() => render());
+
 // Kick off.
 if (haveToken) {
   void refresh();
@@ -278,20 +267,37 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
   }
 
   if (event.listEvent) {
+    // Balance screen has no nav list; list events only come from transaction lists.
+    if (state.screen === "balance") return;
     const index = event.listEvent.currentSelectItemIndex ?? 0;
     const prev = state.screen;
-    if (state.screen === "balance") {
-      // 0 = TRANSACTIONS, 1 = RECURRING
-      go(index === 0 ? "transactions" : "recurring");
-      return;
-    }
     state = selectTransaction(state, index);
     render(prev);
     return;
   }
 
-  if (!event.sysEvent) return;
-  const type = event.sysEvent.eventType ?? 0;
+  // Event type can arrive via sysEvent (CLICK/DOUBLE_CLICK/lifecycle on any
+  // screen) OR via textEvent — scroll on a text container (the balance screen)
+  // is delivered as a textEvent, not a sysEvent.
+  const type = event.sysEvent?.eventType ?? event.textEvent?.eventType;
+  if (type === undefined) return;
+
+  // Balance screen pagination: SCROLL_TOP = previous page, SCROLL_BOTTOM = next.
+  if (state.screen === "balance") {
+    if (type === OsEventTypeList.SCROLL_TOP_EVENT && state.balancePage > 0) {
+      state = withBalancePage(state, state.balancePage - 1);
+      render("balance");
+      return;
+    }
+    if (
+      type === OsEventTypeList.SCROLL_BOTTOM_EVENT &&
+      state.balancePage < balanceTotalPages(state) - 1
+    ) {
+      state = withBalancePage(state, state.balancePage + 1);
+      render("balance");
+      return;
+    }
+  }
 
   if (type === OsEventTypeList.CLICK_EVENT) {
     if (state.screen === "transactions") go("balance");

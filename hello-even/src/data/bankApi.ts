@@ -8,6 +8,8 @@ import type {
   BalancesResponse,
   TransactionsResponse,
   RecurringResponse,
+  LinkedItem,
+  ManageAccountsResponse,
 } from "./types";
 
 // Thrown when the backend rejects our device token (missing/expired/revoked).
@@ -37,6 +39,13 @@ async function apiGet<T>(path: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<
 export async function getBalances(): Promise<Account[]> {
   if (DEV_MODE) return DEV_ACCOUNTS;
   return (await apiGet<BalancesResponse>("/balances")).accounts;
+}
+
+export async function getLinkedItems(): Promise<LinkedItem[]> {
+  if (DEV_MODE) {
+    return [{ itemId: "dev", institution: "Dev Bank", status: "good", accounts: DEV_ACCOUNTS }];
+  }
+  return (await apiGet<ManageAccountsResponse>("/manage/accounts")).items;
 }
 
 // Plaid's recurring-pattern analysis can take 20-30 s on a production item.

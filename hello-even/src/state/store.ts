@@ -1,7 +1,7 @@
 // Immutable app state + transitions. No SDK or rendering concerns here.
 // Bank data is never persisted — every launch fetches live (no cache).
 
-import type { Account, Transaction, RecurringStream } from "../data/types";
+import type { Account, Transaction, RecurringStream, LinkedItem } from "../data/types";
 
 export type Screen = "pairing" | "balance" | "recurring" | "transactions" | "detail";
 // Balances and transactions load independently (a slow transaction sync must
@@ -12,6 +12,8 @@ export type Phase = "loading" | "ready" | "offline";
 export interface AppState {
   readonly screen: Screen;
   readonly accounts: readonly Account[];
+  readonly linkedItems: readonly LinkedItem[];
+  readonly balancePage: number;
   readonly transactions: readonly Transaction[];
   readonly recurringStreams: readonly RecurringStream[];
   readonly accountsPhase: Phase;
@@ -24,6 +26,8 @@ export interface AppState {
 export const initialState: AppState = {
   screen: "balance",
   accounts: [],
+  linkedItems: [],
+  balancePage: 0,
   transactions: [],
   recurringStreams: [],
   accountsPhase: "loading",
@@ -35,6 +39,20 @@ export const initialState: AppState = {
 
 export function withAccounts(s: AppState, accounts: Account[]): AppState {
   return { ...s, accounts, accountsPhase: "ready" };
+}
+
+export function withLinkedItems(s: AppState, items: LinkedItem[]): AppState {
+  return {
+    ...s,
+    linkedItems: items,
+    accounts: items.flatMap((i) => i.accounts),
+    accountsPhase: "ready",
+    balancePage: 0, // reset to first page whenever bank data refreshes
+  };
+}
+
+export function withBalancePage(s: AppState, page: number): AppState {
+  return { ...s, balancePage: page };
 }
 
 export function withTransactions(
