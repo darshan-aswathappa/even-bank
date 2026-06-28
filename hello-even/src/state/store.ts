@@ -13,7 +13,6 @@ export interface AppState {
   readonly screen: Screen;
   readonly accounts: readonly Account[];
   readonly linkedItems: readonly LinkedItem[];
-  readonly balancePage: number;
   readonly transactions: readonly Transaction[];
   readonly recurringStreams: readonly RecurringStream[];
   readonly accountsPhase: Phase;
@@ -27,7 +26,6 @@ export const initialState: AppState = {
   screen: "balance",
   accounts: [],
   linkedItems: [],
-  balancePage: 0,
   transactions: [],
   recurringStreams: [],
   accountsPhase: "loading",
@@ -47,12 +45,7 @@ export function withLinkedItems(s: AppState, items: LinkedItem[]): AppState {
     linkedItems: items,
     accounts: items.flatMap((i) => i.accounts),
     accountsPhase: "ready",
-    balancePage: 0, // reset to first page whenever bank data refreshes
   };
-}
-
-export function withBalancePage(s: AppState, page: number): AppState {
-  return { ...s, balancePage: page };
 }
 
 export function withTransactions(

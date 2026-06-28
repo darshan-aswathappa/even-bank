@@ -13,7 +13,6 @@ import {
   type Screen,
   initialState,
   withLinkedItems,
-  withBalancePage,
   withTransactions,
   withRecurring,
   withAccountsPhase,
@@ -30,11 +29,12 @@ import {
   type PageContainers,
 } from "./bridge/render";
 import {
-  balanceContainer,
-  balanceContent,
-  balanceTotalPages,
-  balanceEmptyContainer,
-  balanceEmptyMessage,
+  balTitleContainer,
+  balTitle,
+  balItems,
+  balListContainer,
+  balEmptyContainer,
+  balEmptyMessage,
 } from "./ui/balanceScreen";
 import {
   txnTitleContainer,
@@ -112,12 +112,15 @@ function buildContainers(s: AppState): PageContainers {
   if (s.screen === "detail") {
     return { text: [detailContainer(detailContent(selectedTransaction(s)))] };
   }
-  // balance screen — full-page text container with pixel-accurate justify()
-  const content = balanceContent(s);
-  if (!content) {
-    return { text: [balanceEmptyContainer(balanceEmptyMessage(s))] };
+  // balance screen — title bar + native-scroll list grouped by institution
+  const items = balItems(s);
+  if (items.length === 0) {
+    return { text: [balEmptyContainer(balEmptyMessage(s))] };
   }
-  return { text: [balanceContainer(content)] };
+  return {
+    text: [balTitleContainer(balTitle(s))],
+    list: [balListContainer(items)],
+  };
 }
 
 // First paint: pairing if we have no device token yet, else Balance.
@@ -276,28 +279,8 @@ const unsubscribe = bridge.onEvenHubEvent((event) => {
     return;
   }
 
-  // Event type can arrive via sysEvent (CLICK/DOUBLE_CLICK/lifecycle on any
-  // screen) OR via textEvent — scroll on a text container (the balance screen)
-  // is delivered as a textEvent, not a sysEvent.
-  const type = event.sysEvent?.eventType ?? event.textEvent?.eventType;
-  if (type === undefined) return;
-
-  // Balance screen pagination: SCROLL_TOP = previous page, SCROLL_BOTTOM = next.
-  if (state.screen === "balance") {
-    if (type === OsEventTypeList.SCROLL_TOP_EVENT && state.balancePage > 0) {
-      state = withBalancePage(state, state.balancePage - 1);
-      render("balance");
-      return;
-    }
-    if (
-      type === OsEventTypeList.SCROLL_BOTTOM_EVENT &&
-      state.balancePage < balanceTotalPages(state) - 1
-    ) {
-      state = withBalancePage(state, state.balancePage + 1);
-      render("balance");
-      return;
-    }
-  }
+  if (!event.sysEvent) return;
+  const type = event.sysEvent.eventType ?? 0;
 
   if (type === OsEventTypeList.CLICK_EVENT) {
     if (state.screen === "transactions") go("balance");
