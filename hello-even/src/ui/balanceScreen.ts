@@ -14,7 +14,7 @@ import type { AppState } from "../state/store";
 import { accountLabel, formatBalance } from "./format";
 import { isHidden } from "../data/hiddenAccounts";
 import { clampBytes, truncate, justifyItem } from "./fit";
-import { MIDDOT } from "./glyphs";
+import { CHEVRON, MIDDOT } from "./glyphs";
 
 export const BAL_TITLE_ID = 1;
 export const BAL_TITLE_NAME = "baltitle";
@@ -64,9 +64,11 @@ export function balItems(state: AppState): string[] {
     const visible = item.accounts.filter((a) => !isHidden(a.id));
     if (visible.length === 0) continue;
 
-    // Bank section header (all-caps institution name) — acts as the group divider.
+    // Bank section header: "▶ INSTITUTION NAME" — the chevron marks the start of
+    // a new bank group and differentiates it from the account rows below.
     const bankName = (item.institution ?? "Bank").toUpperCase();
-    items.push(clampBytes(truncate(bankName, ROW_MAX_PX), ITEM_MAX_BYTES));
+    const header = `${CHEVRON} ${bankName}`;
+    items.push(clampBytes(truncate(header, ROW_MAX_PX), ITEM_MAX_BYTES));
 
     // Account rows: "  Name ····mask     $X,XXX.XX" — amount pushed right within
     // the byte budget (never truncated).
